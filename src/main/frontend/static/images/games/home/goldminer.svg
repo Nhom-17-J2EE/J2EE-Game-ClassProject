@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 600" role="img" aria-label="Gold Miner preview">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1e293b"/>
+      <stop offset="55%" stop-color="#111827"/>
+      <stop offset="100%" stop-color="#05080f"/>
+    </linearGradient>
+    <linearGradient id="dirt" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#7c4a1b"/>
+      <stop offset="100%" stop-color="#3b2410"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="55%" stop-color="#f2b84b"/>
+      <stop offset="100%" stop-color="#c67a1b"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="12%" r="70%">
+      <stop offset="0%" stop-color="#fbbf24" stop-opacity=".5"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="960" height="600" fill="url(#bg)"/>
+  <rect width="960" height="180" fill="url(#glow)"/>
+
+  <rect x="0" y="0" width="960" height="110" fill="#2a170a"/>
+  <rect x="120" y="78" width="720" height="18" rx="9" fill="#8b5a2b"/>
+  <rect x="180" y="95" width="14" height="74" rx="7" fill="#7a4a21"/>
+  <rect x="766" y="95" width="14" height="74" rx="7" fill="#7a4a21"/>
+
+  <circle cx="480" cy="96" r="26" fill="#fed36b"/>
+  <circle cx="480" cy="96" r="17" fill="#f0a93a"/>
+  <path d="M480 112 L452 178" stroke="#d7d8db" stroke-width="6" stroke-linecap="round"/>
+  <path d="M480 112 L510 236" stroke="#c5cad1" stroke-width="4" stroke-linecap="round"/>
+  <path d="M510 236 Q523 260 540 250" stroke="#dce3ec" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M510 236 Q496 260 480 248" stroke="#dce3ec" stroke-width="5" fill="none" stroke-linecap="round"/>
+
+  <rect x="0" y="130" width="960" height="470" fill="url(#dirt)"/>
+  <path d="M0 188 C140 162 235 232 340 214 C455 196 530 154 660 182 C760 206 840 190 960 164 V600 H0Z" fill="#4d2d13"/>
+  <path d="M0 272 C136 232 240 300 350 284 C468 266 566 208 690 244 C778 270 866 250 960 218 V600 H0Z" fill="#643a18"/>
+
+  <circle cx="234" cy="408" r="34" fill="url(#gold)"/>
+  <circle cx="314" cy="468" r="24" fill="url(#gold)"/>
+  <circle cx="704" cy="430" r="46" fill="url(#gold)"/>
+  <circle cx="785" cy="336" r="18" fill="#b6b8bf"/>
+  <circle cx="154" cy="492" r="28" fill="#8f949d"/>
+  <circle cx="578" cy="504" r="30" fill="#7d838d"/>
+
+  <path d="M474 392 L495 416 L478 444 L452 438 L445 408Z" fill="#59d6ff"/>
+  <path d="M618 330 L634 348 L618 376 L592 370 L586 344Z" fill="#79e1ff"/>
+
+  <path d="M384 336 q26 -24 50 0 v34 q-24 16 -50 0z" fill="#7a4f2d"/>
+  <path d="M384 336 q24 -12 50 0" stroke="#dcb679" stroke-width="4" fill="none"/>
+
+  <circle cx="264" cy="188" r="72" fill="#fbbf24" opacity=".1"/>
+  <circle cx="734" cy="212" r="88" fill="#2dd4bf" opacity=".08"/>
+  <circle cx="478" cy="270" r="110" fill="#fbbf24" opacity=".08"/>
+</svg>

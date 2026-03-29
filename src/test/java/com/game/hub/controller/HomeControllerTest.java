@@ -42,6 +42,22 @@ class HomeControllerTest {
     }
 
     @Test
+    void indexShouldSurfaceGoldMinerInQuickPlayLane() {
+        PostRepository postRepository = mock(PostRepository.class);
+        UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);
+        when(postRepository.findAllWithComments()).thenReturn(List.of());
+
+        HomeController controller = new HomeController(postRepository, userAccountRepository);
+        ExtendedModelMap model = new ExtendedModelMap();
+
+        controller.index(model);
+
+        @SuppressWarnings("unchecked")
+        List<GameCatalogItem> quickPlayGames = (List<GameCatalogItem>) model.getAttribute("quickPlayGames");
+        assertTrue(quickPlayGames != null && quickPlayGames.stream().anyMatch(game -> "goldminer".equals(game.code())));
+    }
+
+    @Test
     void multiplayerShouldRedirectToCanonicalCaroModePage() {
         PostRepository postRepository = mock(PostRepository.class);
         UserAccountRepository userAccountRepository = mock(UserAccountRepository.class);

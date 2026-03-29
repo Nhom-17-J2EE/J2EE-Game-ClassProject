@@ -24,11 +24,12 @@ class GameCatalogServiceTest {
         var games = service.findAll();
         Set<String> codes = games.stream().map(GameCatalogItem::code).collect(Collectors.toSet());
 
-        assertEquals(10, games.size());
+        assertEquals(11, games.size());
         assertTrue(codes.contains("caro"));
         assertTrue(codes.contains("chess"));
         assertTrue(codes.contains("xiangqi"));
         assertTrue(codes.contains("minesweeper"));
+        assertTrue(codes.contains("goldminer"));
         assertTrue(codes.contains("cards"));
         assertTrue(codes.contains("blackjack"));
         assertTrue(codes.contains("quiz"));
@@ -73,6 +74,16 @@ class GameCatalogServiceTest {
         assertTrue(minesweeper.supportsGuest());
         assertEquals(false, minesweeper.supportsOnline());
         assertEquals("/games/minesweeper", minesweeper.primaryActionUrl());
+
+        var goldminer = service.findByCode("goldminer").orElseThrow();
+        assertTrue(goldminer.availableNow());
+        assertTrue(goldminer.supportsOffline());
+        assertTrue(goldminer.supportsGuest());
+        assertEquals(false, goldminer.supportsOnline());
+        assertEquals("/goldminer", goldminer.primaryActionUrl());
+        assertTrue(goldminer.hasPreviewMedia());
+        assertTrue(goldminer.previewMediaIsImage());
+        assertTrue(goldminer.previewMediaUrl().startsWith("/images/games/home/goldminer."));
 
         var quiz = service.findByCode("quiz").orElseThrow();
         assertTrue(quiz.availableNow());

@@ -324,6 +324,11 @@
           <li>Flag/chord/tu danh dau hoat dong lien tuc de quet o an toan nhanh hon.</li>
           <li>Qua man se mo do kho tiep theo, thua se hien vi tri min sai.</li>
         </ul>
+        <ul class="hub-portal-bullet-list" th:if="${game.code == 'goldminer'}">
+          <li>Can goc quay, bam tha moc dung luc va keo vang truoc khi dong ho ve 0.</li>
+          <li>Vang to cho diem cao nhung keo cham; da re nhung nang; tui va kim cuong giup lat keo.</li>
+          <li>Ket moi vong se mo cua hang nang cap nho de tang toc keo, TNT hoac gia tri loot.</li>
+        </ul>
         <ul class="hub-portal-bullet-list" th:if="${game.code == 'puzzle'}">
           <li>Tu sanh Puzzle chon game con (Jigsaw, Sliding, Word, Sudoku) theo muc tieu.</li>
           <li>Moi game co HUD rieng: move, time, progress va chuoi hoan thanh.</li>
@@ -381,6 +386,11 @@
           <li>Pha dao man De trong 60 giay.</li>
           <li>Pha dao man Vua khong cam sai co.</li>
           <li>Thang 3 man lien tiep o che do Kho.</li>
+        </ul>
+        <ul class="hub-portal-bullet-list" th:if="${game.code == 'goldminer'}">
+          <li>Qua vong voi muc tieu diem vuot moc ngay truoc khi het gio.</li>
+          <li>Dung TNT de cat mot cu keo xau ma van giu nhip diem tong.</li>
+          <li>Chot chuoi vat pham gia tri cao lien tiep ma khong dinh da lon.</li>
         </ul>
         <ul class="hub-portal-bullet-list" th:if="${game.code == 'puzzle'}">
           <li>Hoan thanh 4 mini-game trong 1 vong choi.</li>

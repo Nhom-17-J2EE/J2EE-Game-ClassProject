@@ -56,6 +56,7 @@ public class GameCatalogController {
             case "quiz" -> redirectToDedicatedRoom("/games/quiz", "/games/quiz/room/", roomId);
             case "typing" -> redirectToDedicatedRoom("/games/typing", "/games/typing/room/", roomId);
             case "monopoly" -> redirectToDedicatedRoom("/games/monopoly", "/games/monopoly/room/", roomId);
+            case "goldminer" -> "redirect:/games/goldminer";
             default -> routeSharedRoom(game.code(), roomId);
         };
     }

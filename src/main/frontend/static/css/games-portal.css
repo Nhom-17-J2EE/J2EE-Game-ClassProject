@@ -48,6 +48,12 @@
   --gp-primary-deep: #1d4ed8;
 }
 
+.hub-portal-theme-goldminer {
+  --gp-primary: #b7791f;
+  --gp-secondary: #0ea5a4;
+  --gp-primary-deep: #8a5b12;
+}
+
 .hub-portal-theme-cards {
   --gp-primary: #0f766e;
   --gp-secondary: #f59e0b;

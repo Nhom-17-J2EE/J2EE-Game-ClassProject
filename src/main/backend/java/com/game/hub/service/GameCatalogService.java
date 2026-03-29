@@ -134,6 +134,24 @@ public class GameCatalogService {
                 )
             ),
             new GameCatalogItem(
+                "goldminer",
+                "Dao vang",
+                "Gold Miner",
+                "Dao vang browser voi moc quay, TNT, 3 vong muc tieu diem va nang cap giua cac vong.",
+                "bi-gem",
+                true,
+                false,
+                true,
+                true,
+                "Choi Dao vang",
+                "/goldminer",
+                List.of(
+                    "Moc quay, tha day va keo ve theo trong luong vat pham.",
+                    "Vang, da, kim cuong, tui bi an va TNT de cat lo.",
+                    "Qua 3 vong voi shop nang cap nho giua moi vong."
+                )
+            ),
+            new GameCatalogItem(
                 "cards",
                 "Danh bai",
                 "Cards",

@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="vi" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: appHead('Dao vang')}"></head>
+<body>
+<div th:replace="~{fragments :: appShell('goldminer')}"></div>
+
+<main class="goldminer-page">
+  <section class="goldminer-hero">
+    <div class="goldminer-hero__copy">
+      <div class="goldminer-kicker">Gold Miner / quick play</div>
+      <h1 th:text="${game != null ? game.displayName : 'Dao vang'}">Dao vang</h1>
+      <p>Moc quay lien tuc, bam tha day de keo vang, cat cu keo xau bang TNT va vuot 3 vong muc tieu diem ngay trong browser.</p>
+      <div class="goldminer-chip-row">
+        <span class="goldminer-chip is-live"><i class="bi bi-gem"></i> Quick play san sang</span>
+        <span class="goldminer-chip"><i class="bi bi-stopwatch-fill"></i> 3 vong / target score</span>
+        <span class="goldminer-chip"><i class="bi bi-bomb"></i> TNT cat lo</span>
+        <span class="goldminer-chip"><i class="bi bi-arrow-repeat"></i> Nang cap giua vong</span>
+      </div>
+    </div>
+    <div class="goldminer-hero__actions">
+      <button id="goldminerHeroStartBtn" type="button" class="goldminer-action is-primary">
+        <i class="bi bi-play-fill"></i>
+        <span>Bat dau run</span>
+      </button>
+      <a th:href="@{/games/goldminer}" class="goldminer-action">
+        <i class="bi bi-stars"></i>
+        <span>Chi tiet game</span>
+      </a>
+      <a th:href="@{/games}" class="goldminer-action">
+        <i class="bi bi-grid"></i>
+        <span>Ve thu vien</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="goldminer-layout">
+    <section class="goldminer-stage">
+      <header class="goldminer-stage__top">
+        <article class="goldminer-stat-card">
+          <span>Round</span>
+          <strong id="goldminerRound">1</strong>
+        </article>
+        <article class="goldminer-stat-card">
+          <span>Score</span>
+          <strong id="goldminerScore">0</strong>
+        </article>
+        <article class="goldminer-stat-card">
+          <span>Target</span>
+          <strong id="goldminerTarget">650</strong>
+        </article>
+        <article class="goldminer-stat-card">
+          <span>Time</span>
+          <strong id="goldminerTime">55s</strong>
+        </article>
+        <article class="goldminer-stat-card">
+          <span>TNT</span>
+          <strong id="goldminerBombs">2</strong>
+        </article>
+        <article class="goldminer-stat-card">
+          <span>Best</span>
+          <strong id="goldminerBestScore">0</strong>
+        </article>
+      </header>
+
+      <section class="goldminer-progress">
+        <div class="goldminer-progress__meta">
+          <span id="goldminerGoalLabel">Con 650 diem de qua vong.</span>
+          <span id="goldminerStatusLine">Nhan Space hoac bam vao canvas de tha moc.</span>
+        </div>
+        <div class="goldminer-progress__track">
+          <div id="goldminerProgressFill" class="goldminer-progress__fill"></div>
+        </div>
+      </section>
+
+      <div class="goldminer-canvas-shell">
+        <canvas id="goldminerCanvas" width="960" height="600" aria-label="Ban choi Dao vang"></canvas>
+
+        <div id="goldminerOverlay" class="goldminer-overlay" hidden>
+          <div class="goldminer-overlay__card">
+            <small id="goldminerOverlayEyebrow">Ready</small>
+            <h2 id="goldminerOverlayTitle">Bat dau Dao vang</h2>
+            <p id="goldminerOverlayText">Can goc, tha moc, keo loot ve va dat target truoc khi het gio.</p>
+            <div id="goldminerOverlayChoices" class="goldminer-upgrade-grid"></div>
+            <div class="goldminer-overlay__actions">
+              <button id="goldminerOverlayPrimary" type="button" class="goldminer-action is-primary">Bat dau</button>
+              <button id="goldminerOverlaySecondary" type="button" class="goldminer-action">Chi tiet game</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="goldminer-toolbar">
+        <button id="goldminerStartBtn" type="button" class="goldminer-action is-primary">
+          <i class="bi bi-play-circle-fill"></i>
+          <span>Bat dau</span>
+        </button>
+        <button id="goldminerPauseBtn" type="button" class="goldminer-action">
+          <i class="bi bi-pause-circle-fill"></i>
+          <span>Tam dung</span>
+        </button>
+        <button id="goldminerBombBtn" type="button" class="goldminer-action">
+          <i class="bi bi-bomb-fill"></i>
+          <span>Nem TNT</span>
+        </button>
+        <button id="goldminerRestartBtn" type="button" class="goldminer-action">
+          <i class="bi bi-arrow-repeat"></i>
+          <span>Choi lai</span>
+        </button>
+      </div>
+    </section>
+
+    <aside class="goldminer-sidebar">
+      <section class="goldminer-panel">
+        <div class="goldminer-panel__head">
+          <div>
+            <h2>Run status</h2>
+            <small>Thong tin hien tai</small>
+          </div>
+          <span class="goldminer-panel__pill">HUD</span>
+        </div>
+        <dl class="goldminer-kv">
+          <div>
+            <dt>Loot con lai</dt>
+            <dd id="goldminerRemaining">0 vat pham</dd>
+          </div>
+          <div>
+            <dt>PB round</dt>
+            <dd id="goldminerBestRound">1</dd>
+          </div>
+          <div>
+            <dt>Total runs</dt>
+            <dd id="goldminerTotalRuns">0</dd>
+          </div>
+          <div>
+            <dt>Wins</dt>
+            <dd id="goldminerWins">0</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="goldminer-panel">
+        <div class="goldminer-panel__head">
+          <div>
+            <h2>Event log</h2>
+            <small>Loot, TNT va cot moc</small>
+          </div>
+          <span class="goldminer-panel__pill">Live</span>
+        </div>
+        <div id="goldminerEventLog" class="goldminer-log"></div>
+      </section>
+
+      <section class="goldminer-panel">
+        <div class="goldminer-panel__head">
+          <div>
+            <h2>Control map</h2>
+            <small>Nhanh tren desktop va mobile</small>
+          </div>
+          <span class="goldminer-panel__pill">Help</span>
+        </div>
+        <ul class="goldminer-tips">
+          <li><strong>Space / click:</strong> Tha moc o goc dang quay.</li>
+          <li><strong>D / TNT:</strong> Cat vat dang keo neu dinh da xau.</li>
+          <li><strong>P:</strong> Tam dung run hien tai.</li>
+          <li><strong>Uu tien:</strong> Vang to cho diem cao, kim cuong keo rat nhanh.</li>
+          <li><strong>Shop:</strong> Chon 1 nang cap giua cac vong de vao sau khoe hon.</li>
+        </ul>
+      </section>
+    </aside>
+  </section>
+</main>
+
+<th:block th:replace="~{fragments :: appScripts('goldminer')}"></th:block>
+<style>
+  .goldminer-page {
+    width: min(1560px, 100%);
+    margin: 0 auto;
+    padding: 16px 0 92px;
+    display: grid;
+    gap: 14px;
+    color: #f5f8ff;
+  }
+
+  .goldminer-hero,
+  .goldminer-stage,
+  .goldminer-panel {
+    border-radius: 28px;
+    border: 1px solid rgba(250, 218, 128, 0.16);
+    background:
+      radial-gradient(circle at 10% 0%, rgba(244, 177, 53, 0.18), transparent 34%),
+      radial-gradient(circle at 100% 0%, rgba(41, 182, 169, 0.14), transparent 32%),
+      linear-gradient(180deg, rgba(15, 23, 35, 0.94), rgba(8, 12, 20, 0.98));
+    box-shadow: 0 24px 56px rgba(3, 8, 16, 0.34);
+    overflow: hidden;
+  }
+
+  .goldminer-hero {
+    padding: 18px 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 18px;
+    align-items: center;
+  }
+
+  .goldminer-kicker {
+    font-size: 0.76rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #f9d27d;
+  }
+
+  .goldminer-hero h1 {
+    margin: 8px 0 10px;
+    font-size: clamp(2rem, 3vw, 3rem);
+    line-height: 0.96;
+    color: #fff4da;
+    letter-spacing: -0.05em;
+    font-family: var(--app-font-display, "Space Grotesk", sans-serif);
+  }
+
+  .goldminer-hero p {
+    margin: 0;
+    max-width: 64ch;
+    color: rgba(236, 244, 255, 0.8);
+    line-height: 1.6;
+  }
+
+  .goldminer-chip-row {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .goldminer-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 227, 161, 0.16);
+    background: rgba(255, 255, 255, 0.06);
+    color: #fdf1d1;
+    font-size: 0.8rem;
+    font-weight: 700;
+  }
+
+  .goldminer-chip.is-live {
+    border-color: rgba(67, 207, 167, 0.28);
+    background: rgba(15, 87, 73, 0.48);
+    color: #d5fff0;
+  }
+
+  .goldminer-hero__actions,
+  .goldminer-toolbar,
+  .goldminer-overlay__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .goldminer-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 16px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 225, 158, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff4d9;
+    text-decoration: none;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    transition: transform .18s ease, border-color .18s ease, background-color .18s ease, box-shadow .18s ease;
+  }
+
+  .goldminer-action:hover,
+  .goldminer-action:focus-visible {
+    color: #fff8ea;
+    border-color: rgba(255, 225, 158, 0.36);
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-1px);
+    box-shadow: 0 12px 24px rgba(3, 8, 16, 0.28);
+  }
+
+  .goldminer-action.is-primary {
+    border-color: rgba(255, 196, 84, 0.5);
+    background: linear-gradient(135deg, #d08a1d, #f3c15d);
+    color: #251709;
+  }
+
+  .goldminer-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1.12fr) minmax(320px, 0.88fr);
+    gap: 14px;
+    align-items: start;
+  }
+
+  .goldminer-stage {
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .goldminer-stage__top {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .goldminer-stat-card {
+    border-radius: 20px;
+    border: 1px solid rgba(255, 225, 158, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px 14px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .goldminer-stat-card span {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 244, 218, 0.6);
+  }
+
+  .goldminer-stat-card strong {
+    font-size: 1.15rem;
+    color: #fff5dd;
+  }
+
+  .goldminer-progress {
+    display: grid;
+    gap: 8px;
+  }
+
+  .goldminer-progress__meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: center;
+    font-size: 0.88rem;
+    color: rgba(236, 244, 255, 0.84);
+  }
+
+  .goldminer-progress__track {
+    width: 100%;
+    height: 14px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 227, 161, 0.12);
+  }
+
+  .goldminer-progress__fill {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #d98217, #f2c15b, #31c4b0);
+    transition: width .2s ease;
+  }
+
+  .goldminer-canvas-shell {
+    position: relative;
+    border-radius: 28px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 227, 161, 0.14);
+    background:
+      linear-gradient(180deg, rgba(244, 177, 53, 0.14), transparent 14%),
+      linear-gradient(180deg, rgba(5, 10, 17, 0.92), rgba(6, 10, 16, 0.98));
+    min-height: 320px;
+  }
+
+  #goldminerCanvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 10;
+    background: radial-gradient(circle at 50% 0%, rgba(255, 214, 126, 0.08), transparent 24%);
+  }
+
+  .goldminer-overlay {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+    background: linear-gradient(180deg, rgba(3, 9, 18, 0.2), rgba(3, 9, 18, 0.76));
+    backdrop-filter: blur(10px);
+    z-index: 2;
+  }
+
+  .goldminer-overlay__card {
+    width: min(620px, 100%);
+    border-radius: 28px;
+    border: 1px solid rgba(255, 225, 158, 0.18);
+    background:
+      radial-gradient(circle at 12% 0%, rgba(244, 177, 53, 0.18), transparent 32%),
+      linear-gradient(180deg, rgba(18, 28, 41, 0.96), rgba(10, 14, 22, 0.98));
+    padding: 22px;
+    display: grid;
+    gap: 14px;
+    box-shadow: 0 28px 56px rgba(3, 8, 16, 0.4);
+  }
+
+  .goldminer-overlay__card small {
+    color: #f7cc79;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-weight: 800;
+  }
+
+  .goldminer-overlay__card h2 {
+    margin: 0;
+    color: #fff4da;
+    font-size: clamp(1.5rem, 2vw, 2.2rem);
+    font-family: var(--app-font-display, "Space Grotesk", sans-serif);
+    letter-spacing: -0.04em;
+  }
+
+  .goldminer-overlay__card p {
+    margin: 0;
+    color: rgba(236, 244, 255, 0.82);
+    line-height: 1.55;
+  }
+
+  .goldminer-upgrade-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .goldminer-upgrade {
+    border-radius: 22px;
+    border: 1px solid rgba(255, 225, 158, 0.14);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff3d4;
+    padding: 16px;
+    text-align: left;
+    display: grid;
+    gap: 8px;
+    transition: transform .16s ease, border-color .16s ease, background-color .16s ease;
+  }
+
+  .goldminer-upgrade:hover,
+  .goldminer-upgrade:focus-visible {
+    transform: translateY(-2px);
+    border-color: rgba(255, 225, 158, 0.32);
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .goldminer-upgrade__icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, rgba(208, 138, 29, 0.22), rgba(49, 196, 176, 0.18));
+    color: #f8d389;
+    font-size: 1.05rem;
+  }
+
+  .goldminer-upgrade strong {
+    font-size: 0.95rem;
+  }
+
+  .goldminer-upgrade span {
+    color: rgba(236, 244, 255, 0.74);
+    line-height: 1.45;
+    font-size: 0.84rem;
+  }
+
+  .goldminer-sidebar {
+    display: grid;
+    gap: 12px;
+  }
+
+  .goldminer-panel {
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .goldminer-panel__head {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .goldminer-panel__head h2 {
+    margin: 0 0 4px;
+    color: #fff4da;
+    font-size: 1rem;
+  }
+
+  .goldminer-panel__head small {
+    color: rgba(236, 244, 255, 0.64);
+  }
+
+  .goldminer-panel__pill {
+    border-radius: 999px;
+    border: 1px solid rgba(255, 225, 158, 0.16);
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f7d287;
+    font-size: 0.74rem;
+    font-weight: 800;
+  }
+
+  .goldminer-kv {
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .goldminer-kv > div {
+    border-radius: 20px;
+    border: 1px solid rgba(255, 225, 158, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 12px;
+    display: grid;
+    gap: 6px;
+  }
+
+  .goldminer-kv dt {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255, 244, 218, 0.56);
+  }
+
+  .goldminer-kv dd {
+    margin: 0;
+    color: #fff3d4;
+    font-weight: 700;
+  }
+
+  .goldminer-log {
+    display: grid;
+    gap: 8px;
+  }
+
+  .goldminer-log__item {
+    display: grid;
+    gap: 4px;
+    padding: 12px;
+    border-radius: 18px;
+    border: 1px solid rgba(255, 225, 158, 0.1);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .goldminer-log__item strong {
+    color: #fff3d4;
+    font-size: 0.88rem;
+  }
+
+  .goldminer-log__item small {
+    color: rgba(236, 244, 255, 0.68);
+  }
+
+  .goldminer-log__item.is-good {
+    border-color: rgba(67, 207, 167, 0.22);
+  }
+
+  .goldminer-log__item.is-bad {
+    border-color: rgba(255, 140, 120, 0.2);
+  }
+
+  .goldminer-log__empty {
+    padding: 16px;
+    border-radius: 18px;
+    border: 1px dashed rgba(255, 225, 158, 0.12);
+    color: rgba(236, 244, 255, 0.64);
+  }
+
+  .goldminer-tips {
+    margin: 0;
+    padding-left: 18px;
+    display: grid;
+    gap: 8px;
+    color: rgba(236, 244, 255, 0.8);
+    line-height: 1.5;
+  }
+
+  .goldminer-tips strong {
+    color: #fff3d4;
+  }
+
+  body:not(.dark-mode) .goldminer-hero,
+  body:not(.dark-mode) .goldminer-stage,
+  body:not(.dark-mode) .goldminer-panel,
+  body:not(.dark-mode) .goldminer-overlay__card {
+    border-color: rgba(182, 123, 39, 0.16);
+    background:
+      radial-gradient(circle at 10% 0%, rgba(224, 157, 62, 0.18), transparent 34%),
+      radial-gradient(circle at 100% 0%, rgba(20, 148, 136, 0.12), transparent 32%),
+      linear-gradient(180deg, rgba(255, 251, 244, 0.96), rgba(244, 238, 228, 0.98));
+    box-shadow: 0 22px 48px rgba(102, 78, 39, 0.12);
+  }
+
+  body:not(.dark-mode) .goldminer-hero h1,
+  body:not(.dark-mode) .goldminer-panel__head h2,
+  body:not(.dark-mode) .goldminer-overlay__card h2,
+  body:not(.dark-mode) .goldminer-stat-card strong,
+  body:not(.dark-mode) .goldminer-kv dd,
+  body:not(.dark-mode) .goldminer-log__item strong,
+  body:not(.dark-mode) .goldminer-tips strong {
+    color: #2d2010;
+  }
+
+  body:not(.dark-mode) .goldminer-hero p,
+  body:not(.dark-mode) .goldminer-progress__meta,
+  body:not(.dark-mode) .goldminer-panel__head small,
+  body:not(.dark-mode) .goldminer-log__item small,
+  body:not(.dark-mode) .goldminer-tips,
+  body:not(.dark-mode) .goldminer-overlay__card p,
+  body:not(.dark-mode) .goldminer-log__empty {
+    color: #665845;
+  }
+
+  body:not(.dark-mode) .goldminer-action,
+  body:not(.dark-mode) .goldminer-chip,
+  body:not(.dark-mode) .goldminer-panel__pill,
+  body:not(.dark-mode) .goldminer-kv > div,
+  body:not(.dark-mode) .goldminer-log__item,
+  body:not(.dark-mode) .goldminer-stat-card,
+  body:not(.dark-mode) .goldminer-upgrade {
+    border-color: rgba(178, 131, 54, 0.14);
+    background: rgba(255, 255, 255, 0.72);
+    color: #38230b;
+  }
+
+  body:not(.dark-mode) .goldminer-kicker,
+  body:not(.dark-mode) .goldminer-overlay__card small,
+  body:not(.dark-mode) .goldminer-panel__pill {
+    color: #9f5d10;
+  }
+
+  body:not(.dark-mode) .goldminer-chip.is-live {
+    border-color: rgba(24, 148, 136, 0.26);
+    background: rgba(222, 248, 245, 0.86);
+    color: #0f5f59;
+  }
+
+  body:not(.dark-mode) .goldminer-action.is-primary {
+    color: #221608;
+  }
+
+  @media (max-width: 1280px) {
+    .goldminer-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .goldminer-stage__top {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 760px) {
+    .goldminer-page {
+      padding-top: 8px;
+    }
+
+    .goldminer-hero {
+      grid-template-columns: 1fr;
+      padding: 16px;
+    }
+
+    .goldminer-stage,
+    .goldminer-panel {
+      border-radius: 22px;
+    }
+
+    .goldminer-stage__top,
+    .goldminer-kv,
+    .goldminer-upgrade-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .goldminer-progress__meta {
+      flex-direction: column;
+      align-items: start;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .goldminer-stage__top,
+    .goldminer-kv,
+    .goldminer-upgrade-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .goldminer-action,
+    .goldminer-toolbar .goldminer-action {
+      width: 100%;
+    }
+  }
+</style>
+<script th:inline="javascript">
+  window.GoldMinerBoot = {
+    detailUrl: /*[[@{/games/goldminer}]]*/ '/games/goldminer',
+    libraryUrl: /*[[@{/games}]]*/ '/games',
+    playUrl: /*[[@{/goldminer}]]*/ '/goldminer'
+  };
+</script>
+<script th:src="@{/js/goldminer-page.js}"></script>
+</body>
+</html>

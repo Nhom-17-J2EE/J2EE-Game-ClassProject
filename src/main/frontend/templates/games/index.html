@@ -51,6 +51,7 @@
         <a th:href="@{/games/monopoly}" class="hub-portal-inline-btn">Co ty phu</a>
         <a th:href="@{/games/cards}" class="hub-portal-inline-btn">Danh bai</a>
         <a th:href="@{/games/cards/blackjack}" class="hub-portal-inline-btn">Blackjack</a>
+        <a th:href="@{/games/goldminer}" class="hub-portal-inline-btn">Dao vang</a>
         <a th:href="@{/games/puzzle}" class="hub-portal-inline-btn">Puzzle</a>
       </div>
     </div>
@@ -142,7 +143,7 @@
           <span class="cg-browser-state-card__eyebrow">Fast browse</span>
           <h2>Dieu huong nhanh</h2>
         </div>
-        <small class="text-muted">6 diem vao nhanh</small>
+        <small class="text-muted">7 diem vao nhanh</small>
       </div>
       <div class="cg-browser-shortcuts">
         <a th:href="@{/games/caro}" class="cg-browser-shortcut" data-code="caro">
@@ -165,6 +166,10 @@
           <i class="bi bi-puzzle-fill"></i>
           <span>Puzzle</span>
         </a>
+        <a th:href="@{/games/goldminer}" class="cg-browser-shortcut" data-code="goldminer">
+          <i class="bi bi-gem"></i>
+          <span>Dao vang</span>
+        </a>
         <a th:href="@{/games/monopoly}" class="cg-browser-shortcut" data-code="monopoly">
           <i class="bi bi-bank"></i>
           <span>Co ty phu</span>
@@ -184,7 +189,7 @@
 
     <div class="cg-home-recommended-grid">
       <a th:each="g,st : ${games}"
-         th:if="${g.code == 'caro' or g.code == 'chess' or g.code == 'cards' or g.code == 'blackjack' or g.code == 'puzzle' or g.code == 'monopoly'}"
+         th:if="${g.code == 'caro' or g.code == 'chess' or g.code == 'cards' or g.code == 'blackjack' or g.code == 'puzzle' or g.code == 'goldminer' or g.code == 'monopoly'}"
          th:href="@{'/games/' + ${g.code}}"
          class="cg-recommended-card"
          th:classappend="${g.code == 'caro'} ? ' is-feature' : (${g.code == 'monopoly'} ? ' is-wide' : '')"
@@ -217,7 +222,7 @@
     <div class="cg-lane-track" data-lane-track>
       <article class="cg-tile"
                th:each="g,st : ${games}"
-               th:attr="data-name=${g.displayName},data-code=${g.code},data-release=${g.code == 'puzzle' || g.code == 'minesweeper' ? 2026 : 2025},data-popularity=${(g.availableNow ? 70 : 35) + (g.supportsOnline ? 18 : 0) + (20 - st.index)},data-online=${g.supportsOnline},data-original=${!g.externalSource}">
+               th:attr="data-name=${g.displayName},data-code=${g.code},data-release=${g.code == 'puzzle' || g.code == 'minesweeper' || g.code == 'goldminer' ? 2026 : 2025},data-popularity=${(g.availableNow ? 70 : 35) + (g.supportsOnline ? 18 : 0) + (20 - st.index)},data-online=${g.supportsOnline},data-original=${!g.externalSource}">
         <div class="cg-tile-thumb"
              th:classappend="' tone-' + ${g.code}"
              th:attr="data-has-media=${g.hasPreviewMedia()}">
@@ -258,7 +263,7 @@
       <article class="cg-tile"
                th:each="g : ${games}"
                th:if="${g.supportsOnline}"
-               th:attr="data-name=${g.displayName},data-code=${g.code},data-release=${g.code == 'puzzle' || g.code == 'minesweeper' ? 2026 : 2025},data-popularity=${(g.availableNow ? 85 : 45)},data-online=${g.supportsOnline},data-original=${!g.externalSource}">
+               th:attr="data-name=${g.displayName},data-code=${g.code},data-release=${g.code == 'puzzle' || g.code == 'minesweeper' || g.code == 'goldminer' ? 2026 : 2025},data-popularity=${(g.availableNow ? 85 : 45)},data-online=${g.supportsOnline},data-original=${!g.externalSource}">
         <div class="cg-tile-thumb"
              th:classappend="' tone-' + ${g.code}"
              th:attr="data-has-media=${g.hasPreviewMedia()}">
@@ -339,8 +344,8 @@
     <div class="cg-lane-track" data-lane-track>
       <article class="cg-tile"
                th:each="g : ${games}"
-               th:if="${g.code == 'cards' or g.code == 'blackjack' or g.code == 'puzzle' or g.code == 'quiz' or g.code == 'typing' or g.code == 'minesweeper'}"
-               th:attr="data-name=${g.displayName},data-code=${g.code},data-release=${g.code == 'puzzle' or g.code == 'minesweeper' ? 2026 : 2025},data-popularity=${(g.availableNow ? 65 : 42) + (g.supportsGuest ? 12 : 0)},data-online=${g.supportsOnline},data-original=${!g.externalSource}">
+               th:if="${g.code == 'cards' or g.code == 'blackjack' or g.code == 'puzzle' or g.code == 'quiz' or g.code == 'typing' or g.code == 'minesweeper' or g.code == 'goldminer'}"
+               th:attr="data-name=${g.displayName},data-code=${g.code},data-release=${g.code == 'puzzle' or g.code == 'minesweeper' or g.code == 'goldminer' ? 2026 : 2025},data-popularity=${(g.availableNow ? 65 : 42) + (g.supportsGuest ? 12 : 0)},data-online=${g.supportsOnline},data-original=${!g.externalSource}">
         <div class="cg-tile-thumb"
              th:classappend="' tone-' + ${g.code}"
              th:attr="data-has-media=${g.hasPreviewMedia()}">
