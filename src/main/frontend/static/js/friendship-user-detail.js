@@ -1,104 +1,175 @@
-﻿(function () {
+﻿(function() {
+  'use strict';
+
   const root = document.getElementById('friendshipUserDetailRoot');
   if (!root) return;
 
   const actionBtn = document.getElementById('friendRelationBtn');
   const out = document.getElementById('friendshipUserDetailOut');
   const ui = window.CaroUi || {};
+
   if (!actionBtn) return;
 
-  const targetUserId = root.dataset.targetUserId || '';
-  const currentUserId = root.dataset.currentUserId || '';
+  const targetUserId = root.dataset.targetUserId || root.dataset.userId || '';
+  const currentUserId = root.dataset.currentUserId || window.CaroUser?.get?.()?.userId || '';
+
+  // ============== UTILITIES ==============
 
   function setStatus(message, ok) {
     if (ui.setStatus) {
       ui.setStatus(out, message, ok);
     } else if (out) {
       out.textContent = String(message || '');
+      out.className = ok ? 'alert alert-success' : 'alert alert-danger';
     }
   }
 
-  function report(data, successMessage) {
-    if (ui.apiResult) {
-      return ui.apiResult(data, { statusEl: out, successMessage });
+  function showToast(message, type = 'info') {
+    if (ui.toast) {
+      ui.toast(message, { type });
+    } else {
+      console.log(`[${type}] ${message}`);
     }
-    const ok = !!(data && data.success);
-    setStatus(ok ? successMessage : String(data?.error || data?.message || 'Thao tac that bai'), ok);
-    return ok;
   }
 
-  function reportError(err) {
-    const message = String(err?.message || err || 'Yeu cau that bai');
-    setStatus(message, false);
-    ui.toast?.(message, { type: 'danger' });
+  function handleApiResponse(data, successMessage) {
+    if (!data?.success) {
+      const error = data?.error || 'Hoạt động thất bại';
+      setStatus(error, false);
+      showToast(error, 'danger');
+      return false;
+    }
+    setStatus(successMessage || 'Thành công', true);
+    showToast(successMessage || 'Thành công', 'success');
+    return true;
+  }
+
+  async function apiCall(url, method = 'GET', payload = null) {
+    try {
+      const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
+      };
+      if (payload && (method === 'POST' || method === 'PUT')) {
+        options.body = JSON.stringify(payload);
+      }
+      const response = await fetch(url, options);
+      return await response.json();
+    } catch (error) {
+      console.error('API call failed:', error);
+      showToast(String(error.message || error), 'danger');
+      return { success: false, error: String(error) };
+    }
   }
 
   function toBool(value) {
     return String(value).toLowerCase() === 'true';
   }
 
-  function updateActionLabel() {
-    if (toBool(root.dataset.isFriend)) {
-      actionBtn.textContent = 'Huy ket ban';
+  // ============== UPDATE UI ==============
+
+  function updateActionLabel(status) {
+    // status can be: "friends", "pending_sent", "pending_received", "none"
+    
+    if (status === 'friends') {
+      actionBtn.textContent = 'Xóa bạn';
       actionBtn.className = 'btn btn-outline-danger';
       return;
     }
-    if (toBool(root.dataset.hasPending)) {
-      actionBtn.textContent = 'Xem thong bao loi moi';
+
+    if (status === 'pending_sent') {
+      actionBtn.textContent = 'Lời mời đã gửi';
       actionBtn.className = 'btn btn-outline-warning';
+      actionBtn.disabled = true;
       return;
     }
-    actionBtn.textContent = 'Gui loi moi ket ban';
+
+    if (status === 'pending_received') {
+      actionBtn.textContent = 'Xem yêu cầu';
+      actionBtn.className = 'btn btn-outline-info';
+      return;
+    }
+
+    // status === 'none'
+    actionBtn.textContent = 'Gửi lời mời kết bạn';
     actionBtn.className = 'btn btn-primary';
+    actionBtn.disabled = false;
   }
 
-  updateActionLabel();
+  // ============== LOAD RELATIONSHIP STATUS ==============
+
+  async function loadRelationshipStatus() {
+    if (!targetUserId || !currentUserId) {
+      setStatus('Thiếu thông tin tài khoản', false);
+      return;
+    }
+
+    const data = await apiCall(`/friendship/api/user-detail/${targetUserId}`);
+    if (!data?.success) {
+      setStatus(data?.error || 'Không thể tải thông tin', false);
+      return;
+    }
+
+    const status = data.relationshipStatus || 'none';
+    updateActionLabel(status);
+    root.dataset.relationshipStatus = status;
+  }
+
+  // ============== EVENT HANDLERS ==============
 
   actionBtn.addEventListener('click', async () => {
     if (!currentUserId || !targetUserId) {
-      setStatus('Thieu thong tin tai khoan.', false);
-      ui.toast?.('Thieu thong tin tai khoan.', { type: 'danger' });
+      setStatus('Thiếu thông tin tài khoản', false);
+      showToast('Thiếu thông tin tài khoản', 'warning');
       return;
     }
 
-    if (toBool(root.dataset.hasPending) && !toBool(root.dataset.isFriend)) {
-      window.location.href = (window.CaroUrl?.path?.('/friendship/notifications') || '/friendship/notifications')
-        + '?currentUserId=' + encodeURIComponent(currentUserId);
+    const status = root.dataset.relationshipStatus || 'none';
+
+    // If pending_received, go to notifications
+    if (status === 'pending_received') {
+      window.location.href = (window.CaroUrl?.path?.('/friendship/notifications') || '/friendship/notifications');
+      return;
+    }
+
+    // If already requested (pending_sent), do nothing
+    if (status === 'pending_sent') {
       return;
     }
 
     actionBtn.disabled = true;
-    try {
-      let res;
-      if (toBool(root.dataset.isFriend)) {
-        res = await fetch('/friendship/remove', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ userId: currentUserId, friendId: targetUserId })
-        });
-      } else {
-        res = await fetch('/friendship/send-request-by-id', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ requesterId: currentUserId, addresseeId: targetUserId })
-        });
-      }
 
-      const data = await res.json();
-      const wasFriend = toBool(root.dataset.isFriend);
-      const ok = report(data, wasFriend ? 'Da huy ket ban' : 'Da gui loi moi ket ban');
-      if (ok) {
-        if (toBool(root.dataset.isFriend)) {
-          root.dataset.isFriend = 'false';
-        } else {
-          root.dataset.hasPending = 'true';
+    try {
+      let data;
+      if (status === 'friends') {
+        // Remove friendship
+        data = await apiCall('/friendship/api/remove', 'POST', { friendId: targetUserId });
+        if (handleApiResponse(data, 'Đã xóa bạn')) {
+          updateActionLabel('none');
+          root.dataset.relationshipStatus = 'none';
         }
-        updateActionLabel();
+      } else {
+        // Send request
+        data = await apiCall('/friendship/api/send-request-by-id', 'POST', { addresseeId: targetUserId });
+        if (handleApiResponse(data, 'Đã gửi lời mời kết bạn')) {
+          updateActionLabel('pending_sent');
+          root.dataset.relationshipStatus = 'pending_sent';
+        }
       }
-    } catch (err) {
-      reportError(err);
+    } catch (error) {
+      console.error('Action failed:', error);
+      setStatus(String(error.message || error), false);
     } finally {
       actionBtn.disabled = false;
     }
   });
+
+  // ============== INITIALIZATION ==============
+
+  window.addEventListener('load', () => {
+    loadRelationshipStatus();
+  });
+
+  // Expose for manual reload
+  window.friendshipUserDetailReload = loadRelationshipStatus;
 })();

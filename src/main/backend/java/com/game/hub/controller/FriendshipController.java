@@ -11,6 +11,7 @@ import com.game.hub.service.FriendshipService;
 import com.game.hub.service.ProfileStatsService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,6 +28,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * REST API Controller for Friendship feature
+ * Handles: friend requests, acceptance, decline, removal, search, and notifications
+ */
 @Controller
 @RequestMapping("/friendship")
 public class FriendshipController {
@@ -48,498 +53,527 @@ public class FriendshipController {
         this.profileStatsService = profileStatsService;
     }
 
+    // ============== PAGE ENDPOINTS ==============
+
     @GetMapping
-    public String page(@RequestParam(required = false) String currentUserId,
-                       HttpServletRequest request,
-                       Model model) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
+    public String page(HttpServletRequest request, Model model) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
             return "redirect:/account/login-page";
         }
-        model.addAllAttributes(buildIndex(resolvedUserId));
-        model.addAttribute("currentUserId", resolvedUserId);
+        model.addAttribute("currentUserId", userId);
         return "friendship/index";
     }
 
-    @ResponseBody
-    @GetMapping("/api")
-    public Map<String, Object> index(@RequestParam(required = false) String currentUserId,
-                                     HttpServletRequest request) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return Map.of("success", false, "error", "Login required");
+    @GetMapping("/notifications")
+    public String notificationsPage(HttpServletRequest request, Model model) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return "redirect:/account/login-page";
         }
-        Map<String, Object> payload = new HashMap<>(buildIndex(resolvedUserId));
-        payload.put("success", true);
-        return payload;
-    }
-
-    @ResponseBody
-    @PostMapping("/send-request")
-    public Map<String, Object> sendRequest(@RequestBody SendByEmailRequest requestBody, HttpServletRequest request) {
-        String sessionUserId = requireSessionUserId(request);
-        if (sessionUserId == null) {
-            return Map.of("success", false, "error", "Login required");
-        }
-        if (requestBody == null || requestBody.requesterId() == null || requestBody.requesterId().isBlank()) {
-            return Map.of("success", false, "error", "Requester is required");
-        }
-        if (!sessionUserId.equals(requestBody.requesterId())) {
-            return Map.of("success", false, "error", "Requester mismatch");
-        }
-        if (userAccountRepository.findById(sessionUserId).isEmpty()) {
-            return Map.of("success", false, "error", "Requester not found");
-        }
-        UserAccount target = userAccountRepository.findByEmail(requestBody.email()).orElse(null);
-        if (target == null) {
-            return Map.of("success", false, "error", "Target email not found");
-        }
-
-        boolean ok = friendshipService.sendRequest(sessionUserId, target.getId());
-        return Map.of("success", ok);
-    }
-
-    @ResponseBody
-    @PostMapping("/send-request-by-id")
-    public Map<String, Object> sendRequestById(@RequestBody SendByIdRequest requestBody, HttpServletRequest request) {
-        String sessionUserId = requireSessionUserId(request);
-        if (sessionUserId == null) {
-            return Map.of("success", false, "error", "Login required");
-        }
-        if (requestBody == null || requestBody.requesterId() == null || requestBody.addresseeId() == null
-            || requestBody.requesterId().isBlank() || requestBody.addresseeId().isBlank()) {
-            return Map.of("success", false, "error", "Requester/Addressee is required");
-        }
-        if (!sessionUserId.equals(requestBody.requesterId())) {
-            return Map.of("success", false, "error", "Requester mismatch");
-        }
-        if (userAccountRepository.findById(sessionUserId).isEmpty()
-            || userAccountRepository.findById(requestBody.addresseeId()).isEmpty()) {
-            return Map.of("success", false, "error", "User not found");
-        }
-        boolean ok = friendshipService.sendRequest(sessionUserId, requestBody.addresseeId());
-        return Map.of("success", ok);
-    }
-
-    @ResponseBody
-    @PostMapping("/accept")
-    public Map<String, Object> accept(@RequestBody FriendshipActionRequest requestBody, HttpServletRequest request) {
-        String sessionUserId = requireSessionUserId(request);
-        if (sessionUserId == null) {
-            return Map.of("success", false, "error", "Login required");
-        }
-        if (requestBody == null || requestBody.friendshipId() == null) {
-            return Map.of("success", false, "error", "Friendship id is required");
-        }
-        String friendUserId = friendshipService.getPendingRequests(sessionUserId).stream()
-            .filter(link -> link != null && requestBody.friendshipId().equals(link.getId()))
-            .map(Friendship::getRequesterId)
-            .filter(id -> id != null && !id.isBlank())
-            .findFirst()
-            .orElse(null);
-
-        boolean ok = friendshipService.acceptRequest(requestBody.friendshipId(), sessionUserId);
-        if (!ok) {
-            return Map.of("success", false);
-        }
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", true);
-        if (friendUserId != null) {
-            UserAccount acceptedFriend = userAccountRepository.findById(friendUserId).orElse(null);
-            if (acceptedFriend != null) {
-                response.put("acceptedFriend", toFriendView(acceptedFriend));
-            }
-        }
-        return response;
-    }
-
-    @ResponseBody
-    @PostMapping("/decline")
-    public Map<String, Object> decline(@RequestBody FriendshipActionRequest requestBody, HttpServletRequest request) {
-        String sessionUserId = requireSessionUserId(request);
-        if (sessionUserId == null) {
-            return Map.of("success", false, "error", "Login required");
-        }
-        if (requestBody == null || requestBody.friendshipId() == null) {
-            return Map.of("success", false, "error", "Friendship id is required");
-        }
-        return Map.of("success", friendshipService.declineRequest(requestBody.friendshipId(), sessionUserId));
-    }
-
-    @ResponseBody
-    @PostMapping("/remove")
-    public Map<String, Object> remove(@RequestBody RemoveFriendRequest requestBody, HttpServletRequest request) {
-        String sessionUserId = requireSessionUserId(request);
-        if (sessionUserId == null) {
-            return Map.of("success", false, "error", "Login required");
-        }
-        if (requestBody == null || requestBody.friendId() == null || requestBody.friendId().isBlank()) {
-            return Map.of("success", false, "error", "Friend id is required");
-        }
-        if (requestBody.userId() != null && !requestBody.userId().isBlank() && !sessionUserId.equals(requestBody.userId())) {
-            return Map.of("success", false, "error", "User mismatch");
-        }
-        return Map.of("success", friendshipService.removeFriendship(sessionUserId, requestBody.friendId()));
+        model.addAttribute("currentUserId", userId);
+        return "friendship/notifications";
     }
 
     @GetMapping("/search")
-    public String searchPage(@RequestParam String query,
-                             @RequestParam(required = false) String currentUserId,
-                             HttpServletRequest request,
-                             Model model) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
+    public String searchPage(@RequestParam String query, HttpServletRequest request, Model model) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
             return "redirect:/account/login-page";
         }
-        model.addAllAttributes(searchInternal(query));
-        model.addAttribute("currentUserId", resolvedUserId);
+        model.addAttribute("currentUserId", userId);
+        model.addAttribute("query", query);
         return "friendship/search";
     }
 
-    @ResponseBody
-    @GetMapping("/api/search")
-    public Map<String, Object> search(@RequestParam String query, HttpServletRequest request) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return Map.of("success", false, "error", "Login required", "query", "", "exactMatches", List.of(), "similarMatches", List.of());
+    @GetMapping("/user-detail/{id}")
+    public String userDetailPage(@PathVariable String id, HttpServletRequest request, Model model) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return "redirect:/account/login-page";
         }
-        return searchInternal(query);
+        if (!userAccountRepository.existsById(id)) {
+            return "redirect:/friendship";
+        }
+        model.addAttribute("currentUserId", userId);
+        model.addAttribute("userId", id);
+        return "friendship/user-detail";
     }
 
-    private Map<String, Object> searchInternal(String query) {
+    // ============== API: FRIENDSHIP ACTIONS ==============
+
+    /**
+     * Gửi lời mời kết bạn bằng email
+     */
+    @PostMapping("/api/send-request")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> sendRequest(@RequestBody SendRequestDto dto, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        if (dto == null || dto.email() == null || dto.email().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Email is required"));
+        }
+
+        UserAccount target = userAccountRepository.findByEmail(dto.email()).orElse(null);
+        if (target == null) {
+            return ResponseEntity.status(404).body(Map.of("success", false, "error", "User not found"));
+        }
+
+        boolean success = friendshipService.sendRequest(userId, target.getId());
+        if (!success) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Cannot send friend request"));
+        }
+
+        return ResponseEntity.ok(Map.of("success", true, "message", "Friend request sent"));
+    }
+
+    /**
+     * Gửi lời mời kết bạn bằng user ID
+     */
+    @PostMapping("/api/send-request-by-id")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> sendRequestById(@RequestBody SendRequestByIdDto dto, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        if (dto == null || dto.addresseeId() == null || dto.addresseeId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "User ID is required"));
+        }
+
+        if (!userAccountRepository.existsById(dto.addresseeId())) {
+            return ResponseEntity.status(404).body(Map.of("success", false, "error", "User not found"));
+        }
+
+        boolean success = friendshipService.sendRequest(userId, dto.addresseeId());
+        if (!success) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Cannot send friend request"));
+        }
+
+        return ResponseEntity.ok(Map.of("success", true, "message", "Friend request sent"));
+    }
+
+    /**
+     * Chấp nhận lời mời kết bạn
+     */
+    @PostMapping("/api/accept")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> acceptRequest(@RequestBody ActionDto dto, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        if (dto == null || dto.friendshipId() == null) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Friendship ID is required"));
+        }
+
+        boolean success = friendshipService.acceptRequest(dto.friendshipId(), userId);
+        if (!success) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Cannot accept friend request"));
+        }
+
+        return ResponseEntity.ok(Map.of("success", true, "message", "Friend request accepted"));
+    }
+
+    /**
+     * Từ chối lời mời kết bạn
+     */
+    @PostMapping("/api/decline")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> declineRequest(@RequestBody ActionDto dto, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        if (dto == null || dto.friendshipId() == null) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Friendship ID is required"));
+        }
+
+        boolean success = friendshipService.declineRequest(dto.friendshipId(), userId);
+        if (!success) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Cannot decline friend request"));
+        }
+
+        return ResponseEntity.ok(Map.of("success", true, "message", "Friend request declined"));
+    }
+
+    /**
+     * Xóa bạn
+     */
+    @PostMapping("/api/remove")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> removeFriend(@RequestBody RemoveFriendDto dto, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        if (dto == null || dto.friendId() == null || dto.friendId().isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Friend ID is required"));
+        }
+
+        boolean success = friendshipService.removeFriendship(userId, dto.friendId());
+        if (!success) {
+            return ResponseEntity.badRequest().body(Map.of("success", false, "error", "Cannot remove friendship"));
+        }
+
+        return ResponseEntity.ok(Map.of("success", true, "message", "Friend removed"));
+    }
+
+    // ============== API: DATA RETRIEVAL ==============
+
+    /**
+     * Lấy danh sách bạn bè của người dùng hiện tại
+     */
+    @GetMapping("/api/friends")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getFriends(HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        List<UserAccount> friends = friendshipService.getFriends(userId);
+        List<FriendView> views = friends.stream().map(this::toFriendView).toList();
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "friends", views,
+            "count", views.size()
+        ));
+    }
+
+    /**
+     * Lấy danh sách lời mời chưa được chấp nhận
+     */
+    @GetMapping("/api/pending-requests")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getPendingRequests(HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        List<Friendship> requests = friendshipService.getPendingRequests(userId);
+        List<FriendRequestView> views = buildFriendRequestViews(requests);
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "requests", views,
+            "count", views.size()
+        ));
+    }
+
+    /**
+     * Lấy danh sách lời mời gửi đi chưa được chấp nhận
+     */
+    @GetMapping("/api/sent-requests")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getSentRequests(HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        List<Friendship> requests = friendshipService.getSentRequests(userId);
+        List<SentRequestView> views = buildSentRequestViews(requests);
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "requests", views,
+            "count", views.size()
+        ));
+    }
+
+    /**
+     * Tìm kiếm người dùng
+     */
+    @GetMapping("/api/search")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> search(@RequestParam String query, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
         if (query == null || query.isBlank()) {
-            return Map.of("success", true, "query", "", "exactMatches", List.of(), "similarMatches", List.of());
+            return ResponseEntity.ok(Map.of(
+                "success", true,
+                "query", "",
+                "exactMatches", List.of(),
+                "similarMatches", List.of()
+            ));
         }
 
         String normalized = query.toLowerCase();
         List<UserAccount> allUsers = userAccountRepository.findAll();
 
+        // Exact matches
         List<UserAccount> exactMatches = allUsers.stream()
             .filter(u -> (u.getDisplayName() != null && u.getDisplayName().toLowerCase().equals(normalized))
                 || (u.getEmail() != null && u.getEmail().toLowerCase().equals(normalized)))
             .toList();
 
-        List<UserAccount> similar;
+        // Similar matches
+        List<UserAccount> similarMatches;
         if (!exactMatches.isEmpty()) {
-            List<String> exactIds = exactMatches.stream().map(UserAccount::getId).toList();
-            similar = allUsers.stream()
+            var exactIds = exactMatches.stream().map(UserAccount::getId).toList();
+            similarMatches = allUsers.stream()
                 .filter(u -> ((u.getDisplayName() != null && u.getDisplayName().toLowerCase().contains(normalized))
                     || (u.getEmail() != null && u.getEmail().toLowerCase().contains(normalized)))
                     && !exactIds.contains(u.getId()))
                 .toList();
         } else {
-            similar = allUsers.stream()
+            similarMatches = allUsers.stream()
                 .filter(u -> {
                     String name = u.getDisplayName() == null ? "" : u.getDisplayName().toLowerCase();
                     String email = u.getEmail() == null ? "" : u.getEmail().toLowerCase();
-                    int match = Math.max(longestCommonSubstringLength(name, normalized), longestCommonSubstringLength(email, normalized));
+                    int match = Math.max(longestCommonSubstringLength(name, normalized),
+                        longestCommonSubstringLength(email, normalized));
                     return match >= 5;
                 })
                 .toList();
         }
 
-        return Map.of("success", true, "query", query, "exactMatches", exactMatches, "similarMatches", similar);
+        List<UserSearchView> exactViews = exactMatches.stream().map(this::toUserSearchView).toList();
+        List<UserSearchView> similarViews = similarMatches.stream().map(this::toUserSearchView).toList();
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "query", query,
+            "exactMatches", exactViews,
+            "similarMatches", similarViews
+        ));
     }
 
-    @GetMapping("/user-detail/{id}")
-    public String userDetailPage(@PathVariable String id,
-                                 @RequestParam(required = false) String currentUserId,
-                                 HttpServletRequest request,
-                                 Model model) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return "redirect:/account/login-page";
-        }
-        if (id == null || id.isBlank() || userAccountRepository.findById(id).isEmpty()) {
-            return "redirect:/friendship?currentUserId=" + resolvedUserId;
-        }
-        model.addAllAttributes(userDetail(id, resolvedUserId));
-        model.addAttribute("currentUserId", resolvedUserId);
-        return "friendship/user-detail";
-    }
-
-    @ResponseBody
+    /**
+     * Lấy thông tin và trạng thái kết bạn với một người dùng cụ thể
+     */
     @GetMapping("/api/user-detail/{id}")
-    public Map<String, Object> userDetail(@PathVariable String id,
-                                          @RequestParam(required = false) String currentUserId,
-                                          HttpServletRequest request) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return Map.of("success", false, "error", "Login required");
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getUserDetail(@PathVariable String id, HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
         }
-        return userDetail(id, resolvedUserId);
-    }
 
-    public Map<String, Object> userDetail(String id,
-                                          String currentUserId) {
-        if (id == null || id.isBlank() || userAccountRepository.findById(id).isEmpty()) {
-            return Map.of("success", false, "error", "User not found");
+        if (id == null || id.isBlank() || !userAccountRepository.existsById(id)) {
+            return ResponseEntity.status(404).body(Map.of("success", false, "error", "User not found"));
         }
-        String resolvedUserId = resolveCurrentUserId(currentUserId);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return Map.of("success", false, "error", "Login required");
-        }
-        Map<String, Object> profile = new HashMap<>(profileStatsService.buildProfileStats(id, resolvedUserId));
+
+        UserAccount targetUser = userAccountRepository.findById(id).orElse(null);
+        Map<String, Object> profile = new HashMap<>(profileStatsService.buildProfileStats(id, userId));
+
+        String relationshipStatus = friendshipService.getRelationshipStatus(userId, id);
         profile.put("success", true);
-        profile.put("isFriend", friendshipService.areFriends(resolvedUserId, id));
-        profile.put("hasPending", friendshipService.hasPendingRequest(resolvedUserId, id)
-            || friendshipService.hasPendingRequest(id, resolvedUserId));
-        return profile;
+        profile.put("relationshipStatus", relationshipStatus);
+
+        return ResponseEntity.ok(profile);
     }
 
-    @ResponseBody
-    @GetMapping("/friend-list")
-    public List<UserAccount> friendList(@RequestParam(required = false) String currentUserId,
-                                        HttpServletRequest request) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return List.of();
-        }
-        return friendshipService.getFriends(resolvedUserId);
-    }
-
-    @GetMapping("/notifications")
-    public String notificationsPage(@RequestParam(required = false) String currentUserId,
-                                    HttpServletRequest request,
-                                    Model model) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return "redirect:/account/login-page";
-        }
-        model.addAllAttributes(notifications(resolvedUserId));
-        model.addAttribute("currentUserId", resolvedUserId);
-        return "friendship/notifications";
-    }
-
-    @ResponseBody
+    /**
+     * Lấy tất cả notifications (friend requests, achievements, system notifications)
+     */
     @GetMapping("/api/notifications")
-    public Map<String, Object> notifications(@RequestParam(required = false) String currentUserId,
-                                             HttpServletRequest request) {
-        String resolvedUserId = requireSessionUserId(request);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return Map.of("success", false, "error", "Login required");
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getNotifications(HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
         }
-        Map<String, Object> payload = new HashMap<>(notifications(resolvedUserId));
-        payload.put("success", true);
-        return payload;
-    }
 
-    public Map<String, Object> notifications(@RequestParam(required = false) String currentUserId) {
-        String resolvedUserId = resolveCurrentUserId(currentUserId);
-        if (resolvedUserId == null || resolvedUserId.isBlank()) {
-            return Map.of(
-                "friendRequests", List.of(),
-                "friendRequestViews", List.of(),
-                "achievementNotifications", List.of(),
-                "systemNotifications", systemNotificationRepository.findTop5ByOrderByCreatedAtDesc()
-            );
-        }
-        UserAccount user = userAccountRepository.findById(resolvedUserId).orElse(null);
+        UserAccount user = userAccountRepository.findById(userId).orElse(null);
         if (user == null) {
-            return Map.of(
-                "friendRequests", List.of(),
-                "friendRequestViews", List.of(),
-                "achievementNotifications", List.of(),
-                "systemNotifications", systemNotificationRepository.findTop5ByOrderByCreatedAtDesc()
-            );
+            return ResponseEntity.status(404).body(Map.of("success", false, "error", "User not found"));
         }
 
-        List<Friendship> pendingRequests = friendshipService.getPendingRequests(resolvedUserId);
-        List<AchievementNotification> unread = achievementNotificationRepository.findUnreadByUserId(resolvedUserId);
-        for (AchievementNotification n : unread) {
-            n.setRead(true);
+        // Mark achievements as read
+        List<AchievementNotification> unreadAchievements = achievementNotificationRepository.findUnreadByUserId(userId);
+        for (AchievementNotification notif : unreadAchievements) {
+            notif.setRead(true);
         }
-        achievementNotificationRepository.saveAll(unread);
+        achievementNotificationRepository.saveAll(unreadAchievements);
 
-        List<SystemNotification> systemNotis = systemNotificationRepository.findTop5ByOrderByCreatedAtDesc();
+        // Update last seen system notification
         user.setLastSystemNotificationSeenAt(LocalDateTime.now());
         userAccountRepository.save(user);
 
-        List<AchievementNotification> allAchievementNotis = achievementNotificationRepository.findByUserIdOrderByCreatedAtDesc(resolvedUserId);
+        // Get pending friend requests
+        List<Friendship> pendingRequests = friendshipService.getPendingRequests(userId);
         List<FriendRequestView> friendRequestViews = buildFriendRequestViews(pendingRequests);
 
-        return Map.of(
-            "friendRequests", pendingRequests,
-            "friendRequestViews", friendRequestViews,
-            "achievementNotifications", allAchievementNotis,
-            "systemNotifications", systemNotis
-        );
+        // Get other notifications
+        List<AchievementNotification> achievements = achievementNotificationRepository.findByUserIdOrderByCreatedAtDesc(userId);
+        List<SystemNotification> systemNotifications = systemNotificationRepository.findTop5ByOrderByCreatedAtDesc();
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "friendRequests", friendRequestViews,
+            "achievements", achievements,
+            "systemNotifications", systemNotifications
+        ));
     }
 
-    private List<FriendRequestView> buildFriendRequestViews(List<Friendship> pendingRequests) {
-        if (pendingRequests == null || pendingRequests.isEmpty()) {
+    /**
+     * Lấy thống kê tổng hợp (index page)
+     */
+    @GetMapping("/api/index")
+    @ResponseBody
+    public ResponseEntity<Map<String, Object>> getIndex(HttpServletRequest request) {
+        String userId = getSessionUserId(request);
+        if (userId == null) {
+            return ResponseEntity.status(401).body(Map.of("success", false, "error", "Unauthorized"));
+        }
+
+        long friendCount = friendshipService.countFriends(userId);
+        long pendingCount = friendshipService.getPendingRequests(userId).size();
+        long sentCount = friendshipService.getSentRequests(userId).size();
+
+        List<UserAccount> friends = friendshipService.getFriends(userId);
+        List<FriendView> friendViews = friends.stream().map(this::toFriendView).toList();
+
+        List<Friendship> pending = friendshipService.getPendingRequests(userId);
+        List<FriendRequestView> pendingViews = buildFriendRequestViews(pending);
+
+        List<Friendship> sent = friendshipService.getSentRequests(userId);
+        List<SentRequestView> sentViews = buildSentRequestViews(sent);
+
+        return ResponseEntity.ok(Map.of(
+            "success", true,
+            "stats", Map.of(
+                "friendCount", friendCount,
+                "pendingCount", pendingCount,
+                "sentCount", sentCount
+            ),
+            "friends", friendViews,
+            "pendingRequests", pendingViews,
+            "sentRequests", sentViews
+        ));
+    }
+
+    // ============== HELPER METHODS ==============
+
+    private List<FriendRequestView> buildFriendRequestViews(List<Friendship> requests) {
+        if (requests == null || requests.isEmpty()) {
             return List.of();
         }
 
-        List<String> requesterIds = pendingRequests.stream()
+        var requesterIds = requests.stream()
             .map(Friendship::getRequesterId)
             .filter(id -> id != null && !id.isBlank())
             .distinct()
             .toList();
-        Map<String, UserAccount> requesterById = new HashMap<>();
-        for (UserAccount account : userAccountRepository.findAllById(requesterIds)) {
-            requesterById.put(account.getId(), account);
+
+        var requesterMap = new HashMap<String, UserAccount>();
+        for (var account : userAccountRepository.findAllById(requesterIds)) {
+            requesterMap.put(account.getId(), account);
         }
 
-        List<FriendRequestView> result = new ArrayList<>();
-        for (Friendship friendship : pendingRequests) {
-            if (friendship == null) {
-                continue;
-            }
-            UserAccount requester = requesterById.get(friendship.getRequesterId());
-            String requesterName = requester == null
-                ? friendship.getRequesterId()
-                : (requester.getDisplayName() == null || requester.getDisplayName().isBlank()
-                    ? requester.getEmail()
-                    : requester.getDisplayName());
-            String requesterEmail = requester == null ? "" : (requester.getEmail() == null ? "" : requester.getEmail());
-            String requesterAvatarPath = requester == null || requester.getAvatarPath() == null || requester.getAvatarPath().isBlank()
-                ? "/uploads/avatars/default-avatar.jpg"
-                : requester.getAvatarPath();
-            result.add(new FriendRequestView(
-                friendship.getId(),
-                friendship.getRequesterId(),
-                requesterName,
-                requesterEmail,
-                requesterAvatarPath,
-                friendship.getAddresseeId()
-            ));
-        }
-        return result;
+        return requests.stream()
+            .filter(f -> f != null)
+            .map(f -> {
+                UserAccount requester = requesterMap.get(f.getRequesterId());
+                return new FriendRequestView(
+                    f.getId(),
+                    f.getRequesterId(),
+                    getDisplayName(requester, f.getRequesterId()),
+                    getEmail(requester),
+                    getAvatarPath(requester),
+                    f.getCreatedAt()
+                );
+            })
+            .toList();
     }
 
-    private Map<String, Object> buildIndex(String currentUserId) {
-        if (currentUserId == null || currentUserId.isBlank()) {
-            return Map.of(
-                "friends", List.of(),
-                "friendViews", List.of(),
-                "pendingRequests", List.of(),
-                "pendingRequestViews", List.of(),
-                "sentRequests", List.of(),
-                "sentRequestViews", List.of()
-            );
-        }
-        List<UserAccount> friends = friendshipService.getFriends(currentUserId);
-        List<Friendship> pendingRequests = friendshipService.getPendingRequests(currentUserId);
-        List<Friendship> sentRequests = friendshipService.getSentRequests(currentUserId);
-        return Map.of(
-            "friends", friends,
-            "friendViews", buildFriendViews(friends),
-            "pendingRequests", pendingRequests,
-            "pendingRequestViews", buildFriendRequestViews(pendingRequests),
-            "sentRequests", sentRequests,
-            "sentRequestViews", buildSentRequestViews(sentRequests)
-        );
-    }
-
-    private List<FriendView> buildFriendViews(List<UserAccount> friends) {
-        if (friends == null || friends.isEmpty()) {
-            return List.of();
-        }
-        List<FriendView> result = new ArrayList<>();
-        for (UserAccount account : friends) {
-            if (account == null || account.getId() == null || account.getId().isBlank()) {
-                continue;
-            }
-            result.add(toFriendView(account));
-        }
-        return result;
-    }
-
-    private List<SentRequestView> buildSentRequestViews(List<Friendship> sentRequests) {
-        if (sentRequests == null || sentRequests.isEmpty()) {
+    private List<SentRequestView> buildSentRequestViews(List<Friendship> requests) {
+        if (requests == null || requests.isEmpty()) {
             return List.of();
         }
 
-        List<String> addresseeIds = sentRequests.stream()
+        var addresseeIds = requests.stream()
             .map(Friendship::getAddresseeId)
             .filter(id -> id != null && !id.isBlank())
             .distinct()
             .toList();
-        Map<String, UserAccount> addresseeById = new HashMap<>();
-        for (UserAccount account : userAccountRepository.findAllById(addresseeIds)) {
-            addresseeById.put(account.getId(), account);
+
+        var addresseeMap = new HashMap<String, UserAccount>();
+        for (var account : userAccountRepository.findAllById(addresseeIds)) {
+            addresseeMap.put(account.getId(), account);
         }
 
-        List<SentRequestView> result = new ArrayList<>();
-        for (Friendship friendship : sentRequests) {
-            if (friendship == null) {
-                continue;
-            }
-            UserAccount addressee = addresseeById.get(friendship.getAddresseeId());
-            result.add(new SentRequestView(
-                friendship.getId(),
-                friendship.getRequesterId(),
-                friendship.getAddresseeId(),
-                displayNameOf(addressee, friendship.getAddresseeId()),
-                emailOf(addressee),
-                avatarPathOf(addressee)
-            ));
-        }
-        return result;
+        return requests.stream()
+            .filter(f -> f != null)
+            .map(f -> {
+                UserAccount addressee = addresseeMap.get(f.getAddresseeId());
+                return new SentRequestView(
+                    f.getId(),
+                    f.getAddresseeId(),
+                    getDisplayName(addressee, f.getAddresseeId()),
+                    getEmail(addressee),
+                    getAvatarPath(addressee),
+                    f.getCreatedAt()
+                );
+            })
+            .toList();
     }
 
-    private String displayNameOf(UserAccount account, String fallback) {
+    private FriendView toFriendView(UserAccount account) {
         if (account == null) {
-            return fallback == null ? "" : fallback;
+            return null;
         }
-        String displayName = account.getDisplayName();
-        if (displayName != null && !displayName.isBlank()) {
-            return displayName;
-        }
-        String email = account.getEmail();
-        if (email != null && !email.isBlank()) {
-            return email;
-        }
-        return fallback == null ? "" : fallback;
+        return new FriendView(
+            account.getId(),
+            getDisplayName(account, account.getId()),
+            getEmail(account),
+            getAvatarPath(account),
+            account.getScore(),
+            account.isOnline()
+        );
     }
 
-    private String emailOf(UserAccount account) {
-        if (account == null || account.getEmail() == null) {
-            return "";
+    private UserSearchView toUserSearchView(UserAccount account) {
+        if (account == null) {
+            return null;
         }
-        return account.getEmail();
+        return new UserSearchView(
+            account.getId(),
+            getDisplayName(account, account.getId()),
+            getEmail(account),
+            getAvatarPath(account)
+        );
     }
 
-    private String avatarPathOf(UserAccount account) {
+    private String getDisplayName(UserAccount account, String fallback) {
+        if (account == null) {
+            return fallback;
+        }
+        if (account.getDisplayName() != null && !account.getDisplayName().isBlank()) {
+            return account.getDisplayName();
+        }
+        if (account.getEmail() != null && !account.getEmail().isBlank()) {
+            return account.getEmail();
+        }
+        return fallback;
+    }
+
+    private String getEmail(UserAccount account) {
+        return account != null && account.getEmail() != null ? account.getEmail() : "";
+    }
+
+    private String getAvatarPath(UserAccount account) {
         if (account == null || account.getAvatarPath() == null || account.getAvatarPath().isBlank()) {
             return "/uploads/avatars/default-avatar.jpg";
         }
         return account.getAvatarPath();
     }
 
-    private FriendView toFriendView(UserAccount account) {
-        if (account == null || account.getId() == null || account.getId().isBlank()) {
-            return null;
-        }
-        return new FriendView(
-            account.getId(),
-            displayNameOf(account, account.getId()),
-            emailOf(account),
-            avatarPathOf(account),
-            account.getScore(),
-            account.isOnline()
-        );
-    }
-
-    private String resolveCurrentUserId(String currentUserId) {
-        if (currentUserId == null) {
-            return "";
-        }
-        String normalized = currentUserId.trim();
-        return normalized.isEmpty() ? "" : normalized;
-    }
-
-    private String resolveCurrentUserId(String currentUserId, HttpServletRequest request) {
-        String sessionUserId = requireSessionUserId(request);
-        if (sessionUserId != null) {
-            return sessionUserId;
-        }
-        return "";
-    }
-
-    private String requireSessionUserId(HttpServletRequest request) {
+    private String getSessionUserId(HttpServletRequest request) {
         if (request == null) {
             return null;
         }
@@ -552,16 +586,12 @@ public class FriendshipController {
             return null;
         }
         String userId = String.valueOf(value).trim();
-        if (userId.isEmpty()) {
-            return null;
-        }
-        return userId;
+        return userId.isEmpty() ? null : userId;
     }
 
     private int longestCommonSubstringLength(String source, String target) {
         int[][] table = new int[source.length() + 1][target.length() + 1];
         int max = 0;
-
         for (int i = 1; i <= source.length(); i++) {
             for (int j = 1; j <= target.length(); j++) {
                 if (source.charAt(i - 1) == target.charAt(j - 1)) {
@@ -570,43 +600,47 @@ public class FriendshipController {
                 }
             }
         }
-
         return max;
     }
 
-    public record SendByEmailRequest(String requesterId, String email) {
-    }
+    // ============== DTOs ==============
 
-    public record SendByIdRequest(String requesterId, String addresseeId) {
-    }
+    record SendRequestDto(String email) {}
+    record SendRequestByIdDto(String addresseeId) {}
+    record ActionDto(Long friendshipId) {}
+    record RemoveFriendDto(String friendId) {}
 
-    public record FriendshipActionRequest(Long friendshipId) {
-    }
+    record FriendView(
+        String userId,
+        String displayName,
+        String email,
+        String avatarPath,
+        int score,
+        boolean online
+    ) {}
 
-    public record RemoveFriendRequest(String userId, String friendId) {
-    }
+    record FriendRequestView(
+        Long friendshipId,
+        String requesterId,
+        String requesterName,
+        String requesterEmail,
+        String requesterAvatarPath,
+        LocalDateTime createdAt
+    ) {}
 
-    public record FriendRequestView(Long friendshipId,
-                                    String requesterId,
-                                    String requesterName,
-                                    String requesterEmail,
-                                    String requesterAvatarPath,
-                                    String addresseeId) {
-    }
+    record SentRequestView(
+        Long friendshipId,
+        String addresseeId,
+        String addresseeName,
+        String addresseeEmail,
+        String addresseeAvatarPath,
+        LocalDateTime createdAt
+    ) {}
 
-    public record FriendView(String userId,
-                             String displayName,
-                             String email,
-                             String avatarPath,
-                             int score,
-                             boolean online) {
-    }
-
-    public record SentRequestView(Long friendshipId,
-                                  String requesterId,
-                                  String addresseeId,
-                                  String addresseeName,
-                                  String addresseeEmail,
-                                  String addresseeAvatarPath) {
-    }
+    record UserSearchView(
+        String userId,
+        String displayName,
+        String email,
+        String avatarPath
+    ) {}
 }
