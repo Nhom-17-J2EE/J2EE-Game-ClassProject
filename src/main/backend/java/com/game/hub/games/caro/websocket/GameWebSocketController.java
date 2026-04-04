@@ -1,6 +1,7 @@
 package com.game.hub.games.caro.websocket;
 
 import com.game.hub.service.AchievementService;
+import com.game.hub.service.WordFilterService;
 import com.game.hub.entity.UserAccount;
 import com.game.hub.repository.UserAccountRepository;
 import com.game.hub.games.caro.service.GameRoomService;
@@ -29,16 +30,19 @@ public class GameWebSocketController {
     private final SimpMessagingTemplate messagingTemplate;
     private final UserAccountRepository userAccountRepository;
     private final AchievementService achievementService;
+    private final WordFilterService wordFilterService;
     private final Map<String, RoomPresence> sessionRoomPresence = new ConcurrentHashMap<>();
 
     public GameWebSocketController(GameRoomService gameRoomService,
                                    SimpMessagingTemplate messagingTemplate,
                                    UserAccountRepository userAccountRepository,
-                                   AchievementService achievementService) {
+                                   AchievementService achievementService,
+                                   WordFilterService wordFilterService) {
         this.gameRoomService = gameRoomService;
         this.messagingTemplate = messagingTemplate;
         this.userAccountRepository = userAccountRepository;
         this.achievementService = achievementService;
+        this.wordFilterService = wordFilterService;
     }
 
     @MessageMapping("/game.join")
@@ -256,6 +260,10 @@ public class GameWebSocketController {
         if (text.isBlank()) {
             return;
         }
+        
+        // Lọc từ ngữ bị cấm
+        text = wordFilterService.filter(text);
+        
         PlayerMeta playerMeta = playerMeta(userId);
         messagingTemplate.convertAndSend("/topic/room." + message.getRoomId(), Map.of(
             "type", "CHAT",

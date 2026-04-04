@@ -1,289 +1,413 @@
-(function(){
+(function() {
+  'use strict';
+
   const root = document.getElementById('friendshipRoot');
-  if(!root) return;
+  if (!root) return;
 
   const uid = root.dataset.currentUserId || window.CaroUser?.get?.()?.userId || '';
   const form = document.getElementById('sendByEmailForm');
   const out = document.getElementById('out');
-  if(!form || !out) return;
+  if (!form || !out) return;
 
   const ui = window.CaroUi || {};
+
   const lists = {
     friends: document.getElementById('friendsList'),
     pending: document.getElementById('pendingRequestsList'),
     sent: document.getElementById('sentRequestsList')
   };
 
-  function setStatus(message, ok){
+  // ============== UTILITIES ==============
+
+  function setStatus(message, ok) {
     if (ui.setStatus) {
       ui.setStatus(out, message, ok);
     } else if (out) {
       out.textContent = String(message || '');
+      out.className = ok ? 'alert alert-success' : 'alert alert-danger';
     }
   }
 
-  function report(data, successMessage){
-    if (ui.apiResult) {
-      return ui.apiResult(data, { statusEl: out, successMessage });
+  function showToast(message, type = 'info') {
+    if (ui.toast) {
+      ui.toast(message, { type });
+    } else {
+      console.log(`[${type}] ${message}`);
     }
-    const ok = !!(data && data.success);
-    setStatus(ok ? successMessage : String(data?.error || data?.message || 'Thao tac that bai'), ok);
-    return ok;
   }
 
-  function reportError(err){
-    const message = String(err?.message || err || 'Yeu cau that bai');
-    setStatus(message, false);
-    ui.toast?.(message, { type: 'danger' });
+  function handleApiResponse(data, successMessage) {
+    if (!data?.success) {
+      const error = data?.error || 'Hoạt động thất bại';
+      setStatus(error, false);
+      showToast(error, 'danger');
+      return false;
+    }
+    setStatus(successMessage || 'Thành công', true);
+    showToast(successMessage || 'Thành công', 'success');
+    return true;
   }
 
-  function ensureLogin(){
+  function ensureLogin() {
     if (!uid) {
-      setStatus('Can dang nhap de su dung tinh nang ban be', false);
-      ui.toast?.('Can dang nhap de su dung tinh nang ban be', { type: 'danger' });
+      const msg = 'Bạn cần đăng nhập để sử dụng tính năng này';
+      setStatus(msg, false);
+      showToast(msg, 'warning');
       return false;
     }
     return true;
   }
 
-  async function postJson(url, payload){
-    const r = await fetch(url, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(payload || {})
-    });
-    return r.json();
+  async function apiCall(url, method = 'GET', payload = null) {
+    try {
+      const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
+      };
+      if (payload && (method === 'POST' || method === 'PUT')) {
+        options.body = JSON.stringify(payload);
+      }
+      const response = await fetch(url, options);
+      return await response.json();
+    } catch (error) {
+      console.error('API call failed:', error);
+      showToast(String(error.message || error), 'danger');
+      return { success: false, error: String(error) };
+    }
   }
 
-  function refreshEmptyState(listEl, message){
+  function ensureLists() {
+    return lists.friends && lists.pending && lists.sent;
+  }
+
+  function removeEmptyPlaceholder(listEl) {
     if (!listEl) return;
-    const items = Array.from(listEl.querySelectorAll(':scope > .list-group-item'));
-    const hasRealItem = items.some((li) => !li.classList.contains('text-muted'));
-    const placeholder = items.find((li) => li.classList.contains('text-muted'));
-    if (hasRealItem && placeholder) {
-      placeholder.remove();
-      return;
-    }
-    if (!hasRealItem && !placeholder) {
-      const li = document.createElement('li');
-      li.className = 'list-group-item text-muted small';
-      li.textContent = message;
-      listEl.appendChild(li);
-    }
+    const placeholder = listEl.querySelector('.list-group-item.text-muted');
+    if (placeholder) placeholder.remove();
   }
 
-  function removeRowFromButton(btn){
-    const row = btn && btn.closest('.list-group-item');
+  function showEmptyState(listEl, message) {
+    if (!listEl) return;
+    const hasItems = listEl.querySelectorAll('.list-group-item:not(.text-muted)').length > 0;
+    if (hasItems) return;
+
+    const li = document.createElement('li');
+    li.className = 'list-group-item text-muted small text-center py-3';
+    li.textContent = message;
+    listEl.appendChild(li);
+  }
+
+  function removeRowFromButton(btn) {
+    const row = btn?.closest('.list-group-item');
     if (row) row.remove();
+  }
+
+  function createButton(className, text, onClick) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = className;
+    btn.textContent = text;
+    if (onClick) btn.addEventListener('click', onClick);
+    return btn;
+  }
+
+  function createLink(href, text, className = 'btn btn-sm btn-outline-primary') {
+    const a = document.createElement('a');
+    a.href = href;
+    a.textContent = text;
+    a.className = className;
+    return a;
   }
 
   function appPath(path) {
     return window.CaroUrl?.path?.(path) || path;
   }
 
-  function buildHref(path, params) {
-    const base = appPath(path);
-    const query = new URLSearchParams();
-    Object.entries(params || {}).forEach(([key, value]) => {
-      if (value == null || value === '') return;
-      query.set(key, String(value));
-    });
-    const qs = query.toString();
-    return qs ? (base + (base.includes('?') ? '&' : '?') + qs) : base;
+  // ============== LOAD INDEX DATA ==============
+
+  async function loadIndexData() {
+    if (!ensureLogin() || !ensureLists()) return;
+
+    const data = await apiCall('/friendship/api/index');
+    if (!data?.success) return;
+
+    // Load friends
+    renderFriends(data.friends || []);
+
+    // Load pending requests
+    renderPendingRequests(data.pendingRequests || []);
+
+    // Load sent requests
+    renderSentRequests(data.sentRequests || []);
   }
 
-  function createButton(className, text, dataset) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = className;
-    btn.textContent = text;
-    Object.entries(dataset || {}).forEach(([k, v]) => {
-      if (v != null) {
-        btn.dataset[k] = String(v);
-      }
-    });
-    return btn;
+  function renderFriends(friends) {
+    if (!lists.friends) return;
+    lists.friends.innerHTML = '';
+    if (!friends || friends.length === 0) {
+      showEmptyState(lists.friends, 'Bạn chưa có bạn bè');
+      return;
+    }
+    friends.forEach(friend => createFriendRow(friend));
+    
+    // Update stat badges
+    const badge = document.getElementById('friend-count-badge');
+    if (badge) badge.textContent = `${friends.length} bạn`;
+    const display = document.getElementById('friendCountDisplay');
+    if (display) display.textContent = String(friends.length);
   }
 
-  function createLink(className, text, href) {
-    const a = document.createElement('a');
-    a.className = className;
-    a.textContent = text;
-    a.href = href;
-    return a;
+  function renderPendingRequests(requests) {
+    if (!lists.pending) return;
+    lists.pending.innerHTML = '';
+    if (!requests || requests.length === 0) {
+      showEmptyState(lists.pending, 'Bạn không có lời mời chưa xử lý');
+      return;
+    }
+    requests.forEach(req => createPendingRequestRow(req));
+    
+    // Update stat badges
+    const badge = document.getElementById('pending-count-badge');
+    if (badge) badge.textContent = `${requests.length} mục`;
+    const display = document.getElementById('pendingCountDisplay');
+    if (display) display.textContent = String(requests.length);
   }
 
-  function appendAcceptedFriendFromPendingRow(pendingRow, acceptedFriend) {
-    if (!pendingRow || !lists.friends) return;
-    const friend = acceptedFriend && typeof acceptedFriend === 'object' ? acceptedFriend : null;
-    const friendId = String(friend?.userId || pendingRow.dataset.requesterId || '').trim();
-    if (!friendId) return;
+  function renderSentRequests(requests) {
+    if (!lists.sent) return;
+    lists.sent.innerHTML = '';
+    if (!requests || requests.length === 0) {
+      showEmptyState(lists.sent, 'Bạn không có lời mời đã gửi nào');
+      return;
+    }
+    requests.forEach(req => createSentRequestRow(req));
+    
+    // Update stat badges
+    const badge = document.getElementById('sent-count-badge');
+    if (badge) badge.textContent = `${requests.length} mục`;
+    const display = document.getElementById('sentCountDisplay');
+    if (display) display.textContent = String(requests.length);
+  }
 
-    const name = String(friend?.displayName || pendingRow.querySelector('.fw-semibold')?.textContent?.trim() || friendId);
-    const email = String(friend?.email || pendingRow.querySelector('.text-muted')?.textContent?.trim() || '');
-    const avatarEl = pendingRow.querySelector('img');
-    const avatarPath = String(friend?.avatarPath || avatarEl?.getAttribute('src') || avatarEl?.src || '/uploads/avatars/default-avatar.jpg');
-    const isOnline = !!friend?.online;
-    const scoreValue = friend?.score;
-
+  function createFriendRow(friend) {
     const li = document.createElement('li');
     li.className = 'list-group-item';
-    li.dataset.friendId = friendId;
-
-    const card = document.createElement('article');
-    card.className = 'cg-social-card-row';
+    li.dataset.friendId = friend.userId;
 
     const row = document.createElement('div');
-    row.className = 'cg-social-card-row__header';
+    row.className = 'd-flex align-items-center gap-3 py-2';
 
+    // Avatar
     const img = document.createElement('img');
-    img.src = avatarPath;
-    img.alt = 'Anh dai dien';
-    img.width = 52;
-    img.height = 52;
-    img.className = 'cg-social-avatar rounded-circle border flex-shrink-0';
+    img.src = friend.avatarPath;
+    img.alt = friend.displayName;
+    img.width = 48;
+    img.height = 48;
+    img.className = 'rounded-circle flex-shrink-0 border';
     row.appendChild(img);
 
-    const content = document.createElement('div');
-    content.className = 'cg-social-card-row__body';
+    // Info
+    const info = document.createElement('div');
+    info.className = 'flex-grow-1';
+    const title = document.createElement('div');
+    title.className = 'fw-semibold';
+    title.textContent = friend.displayName || friend.email;
+    info.appendChild(title);
+    const meta = document.createElement('div');
+    meta.className = 'text-muted small';
+    meta.textContent = `${friend.email} | Điểm: ${friend.score}`;
+    info.appendChild(meta);
+    row.appendChild(info);
 
-    const titleRow = document.createElement('div');
-    titleRow.className = 'cg-social-card-row__topline';
+    // Status badge
+    const badge = document.createElement('span');
+    badge.className = `badge ${friend.online ? 'bg-success' : 'bg-secondary'}`;
+    badge.textContent = friend.online ? 'Trực tuyến' : 'Ngoại tuyến';
+    row.appendChild(badge);
 
-    const nameEl = document.createElement('span');
-    nameEl.className = 'fw-semibold';
-    nameEl.textContent = name;
-    titleRow.appendChild(nameEl);
-
-    const onlineBadge = document.createElement('span');
-    onlineBadge.className = 'cg-social-pill ' + (isOnline ? 'is-positive' : 'is-muted');
-    onlineBadge.textContent = isOnline ? 'Truc tuyen' : 'Ngoai tuyen';
-    titleRow.appendChild(onlineBadge);
-
-    content.appendChild(titleRow);
-
-    const metaLine = document.createElement('div');
-    metaLine.className = 'cg-social-meta-line';
-
-    const emailEl = document.createElement('span');
-    emailEl.textContent = email;
-    metaLine.appendChild(emailEl);
-
-    const scoreEl = document.createElement('span');
-    scoreEl.textContent = Number.isFinite(Number(scoreValue))
-      ? ('Diem ' + Number(scoreValue))
-      : 'Moi chap nhan';
-    metaLine.appendChild(scoreEl);
-    content.appendChild(metaLine);
-
+    // Actions
     const actions = document.createElement('div');
-    actions.className = 'cg-social-actions';
-    actions.appendChild(createLink(
-      'btn btn-sm btn-outline-primary',
-      'Xem',
-      buildHref('/friendship/user-detail/' + encodeURIComponent(friendId), { currentUserId: uid })
+    actions.className = 'flex-shrink-0 d-flex gap-2';
+    actions.appendChild(createLink(`/friendship/user-detail/${friend.userId}`, 'Xem', 'btn btn-sm btn-outline-primary'));
+    actions.appendChild(createButton('btn btn-sm btn-outline-danger remove-friend',
+      'Xóa bạn',
+      async () => await onRemoveFriend(friend.userId, li)
     ));
-    actions.appendChild(createLink(
-      'btn btn-sm btn-outline-success',
-      'Nhan tin',
-      buildHref('/chat/private', { currentUserId: uid, friendId })
-    ));
-    actions.appendChild(createButton(
-      'remove-friend btn btn-sm btn-outline-danger',
-      'Huy ban',
-      { friendId }
-    ));
-    content.appendChild(actions);
+    row.appendChild(actions);
 
-    row.appendChild(content);
-    card.appendChild(row);
-    li.appendChild(card);
+    li.appendChild(row);
     lists.friends.appendChild(li);
-    refreshEmptyState(lists.friends, 'Chua co ban be.');
   }
 
-  form.onsubmit = async (e)=>{
+  function createPendingRequestRow(req) {
+    const li = document.createElement('li');
+    li.className = 'list-group-item';
+    li.dataset.friendshipId = req.friendshipId;
+
+    const row = document.createElement('div');
+    row.className = 'd-flex align-items-center gap-3 py-2';
+
+    // Avatar
+    const img = document.createElement('img');
+    img.src = req.requesterAvatarPath;
+    img.alt = req.requesterName;
+    img.width = 48;
+    img.height = 48;
+    img.className = 'rounded-circle flex-shrink-0 border';
+    row.appendChild(img);
+
+    // Info
+    const info = document.createElement('div');
+    info.className = 'flex-grow-1';
+    const title = document.createElement('div');
+    title.className = 'fw-semibold';
+    title.textContent = req.requesterName;
+    info.appendChild(title);
+    const meta = document.createElement('div');
+    meta.className = 'text-muted small';
+    meta.textContent = req.requesterEmail || 'Không có email';
+    info.appendChild(meta);
+    row.appendChild(info);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'flex-shrink-0 d-flex gap-2';
+    actions.appendChild(createButton('btn btn-sm btn-outline-success accept-request',
+      'Chấp nhận',
+      async () => await onAcceptRequest(req.friendshipId, li, req.requesterId)
+    ));
+    actions.appendChild(createButton('btn btn-sm btn-outline-danger decline-request',
+      'Từ chối',
+      async () => await onDeclineRequest(req.friendshipId, li)
+    ));
+    row.appendChild(actions);
+
+    li.appendChild(row);
+    lists.pending.appendChild(li);
+  }
+
+  function createSentRequestRow(req) {
+    const li = document.createElement('li');
+    li.className = 'list-group-item';
+    li.dataset.friendshipId = req.friendshipId;
+
+    const row = document.createElement('div');
+    row.className = 'd-flex align-items-center gap-3 py-2';
+
+    // Avatar
+    const img = document.createElement('img');
+    img.src = req.addresseeAvatarPath;
+    img.alt = req.addresseeName;
+    img.width = 48;
+    img.height = 48;
+    img.className = 'rounded-circle flex-shrink-0 border';
+    row.appendChild(img);
+
+    // Info
+    const info = document.createElement('div');
+    info.className = 'flex-grow-1';
+    const title = document.createElement('div');
+    title.className = 'fw-semibold';
+    title.textContent = req.addresseeName;
+    info.appendChild(title);
+    const meta = document.createElement('div');
+    meta.className = 'text-muted small';
+    meta.textContent = `Đang chờ - ${formatDate(req.createdAt)}`;
+    info.appendChild(meta);
+    row.appendChild(info);
+
+    // Actions
+    const actions = document.createElement('div');
+    actions.className = 'flex-shrink-0 d-flex gap-2';
+    actions.appendChild(createLink(`/friendship/user-detail/${req.addresseeId}`, 'Xem', 'btn btn-sm btn-outline-primary'));
+    actions.appendChild(createButton('btn btn-sm btn-outline-danger cancel-request',
+      'Hủy',
+      async () => await onCancelSentRequest(req.addresseeId, li)
+    ));
+    row.appendChild(actions);
+
+    li.appendChild(row);
+    lists.sent.appendChild(li);
+  }
+
+  // ============== EVENT HANDLERS ==============
+
+  async function onAcceptRequest(friendshipId, row, requesterId) {
+    const data = await apiCall('/friendship/api/accept', 'POST', { friendshipId });
+    if (handleApiResponse(data, 'Đã chấp nhận lời mời kết bạn')) {
+      removeEmptyPlaceholder(lists.pending);
+      removeRowFromButton({ closest: () => row });
+      showEmptyState(lists.pending, 'Bạn không có lời mời chưa xử lý');
+      loadIndexData();
+    }
+  }
+
+  async function onDeclineRequest(friendshipId, row) {
+    const data = await apiCall('/friendship/api/decline', 'POST', { friendshipId });
+    if (handleApiResponse(data, 'Đã từ chối lời mời kết bạn')) {
+      removeRowFromButton({ closest: () => row });
+      showEmptyState(lists.pending, 'Bạn không có lời mời chưa xử lý');
+    }
+  }
+
+  async function onRemoveFriend(friendId, row) {
+    if (!confirm('Bạn chắc chắn muốn xóa bạn này?')) return;
+    const data = await apiCall('/friendship/api/remove', 'POST', { friendId });
+    if (handleApiResponse(data, 'Đã xóa bạn')) {
+      removeRowFromButton({ closest: () => row });
+      showEmptyState(lists.friends, 'Bạn chưa có bạn bè');
+    }
+  }
+
+  async function onCancelSentRequest(friendId, row) {
+    if (!confirm('Bạn chắc chắn muốn hủy lời mời này?')) return;
+    const data = await apiCall('/friendship/api/remove', 'POST', { friendId });
+    if (handleApiResponse(data, 'Đã hủy lời mời kết bạn')) {
+      removeRowFromButton({ closest: () => row });
+      showEmptyState(lists.sent, 'Bạn không có lời mời đã gửi nào');
+    }
+  }
+
+  // ============== FORM SUBMISSION ==============
+
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!ensureLogin()) return;
-    const email = document.getElementById('email');
-    try {
-      const data = await postJson('/friendship/send-request', {requesterId:uid,email:email.value});
-      const ok = report(data, 'Da gui loi moi ket ban');
-      if (ok && email) {
-        email.value = '';
-      }
-    } catch (err) {
-      reportError(err);
+
+    const emailInput = document.getElementById('email');
+    const email = emailInput?.value?.trim();
+
+    if (!email) {
+      showToast('Vui lòng nhập email', 'warning');
+      return;
     }
-  };
 
-  root.addEventListener('click', async (event) => {
-    const btn = event.target.closest('button');
-    if (!btn) return;
-
-    try {
-      if (btn.classList.contains('accept')) {
-        const pendingRow = btn.closest('[data-friendship-id]');
-        const siblings = pendingRow ? pendingRow.querySelectorAll('button') : [btn];
-        siblings.forEach((node) => { node.disabled = true; });
-        const data = await postJson('/friendship/accept', {friendshipId:Number(btn.dataset.id)});
-        const ok = report(data, 'Da chap nhan loi moi ket ban');
-        if (ok) {
-          appendAcceptedFriendFromPendingRow(pendingRow, data?.acceptedFriend);
-          if (pendingRow) pendingRow.remove();
-          refreshEmptyState(lists.pending, 'Khong co loi moi dang cho.');
-        } else {
-          siblings.forEach((node) => { node.disabled = false; });
-        }
-        return;
-      }
-
-      if (btn.classList.contains('decline')) {
-        btn.disabled = true;
-        const data = await postJson('/friendship/decline', {friendshipId:Number(btn.dataset.id)});
-        const ok = report(data, 'Da tu choi loi moi ket ban');
-        if (ok) {
-          removeRowFromButton(btn);
-          refreshEmptyState(lists.pending, 'Khong co loi moi dang cho.');
-        } else {
-          btn.disabled = false;
-        }
-        return;
-      }
-
-      if (btn.classList.contains('remove-friend')) {
-        if (!ensureLogin()) return;
-        btn.disabled = true;
-        const friendId = btn.dataset.friendId;
-        const data = await postJson('/friendship/remove', {userId: uid, friendId});
-        const ok = report(data, 'Da huy ket ban');
-        if (ok) {
-          removeRowFromButton(btn);
-          refreshEmptyState(lists.friends, 'Chua co ban be.');
-        } else {
-          btn.disabled = false;
-        }
-        return;
-      }
-
-      if (btn.classList.contains('cancel-sent')) {
-        if (!ensureLogin()) return;
-        btn.disabled = true;
-        const friendId = btn.dataset.friendId;
-        const data = await postJson('/friendship/remove', {userId: uid, friendId});
-        const ok = report(data, 'Da huy loi moi ket ban');
-        if (ok) {
-          removeRowFromButton(btn);
-          refreshEmptyState(lists.sent, 'Khong co loi moi da gui.');
-        } else {
-          btn.disabled = false;
-        }
-      }
-    } catch (err) {
-      reportError(err);
-      btn.disabled = false;
-      const row = btn.closest('[data-friendship-id]');
-      row?.querySelectorAll('button').forEach((node) => { node.disabled = false; });
+    const data = await apiCall('/friendship/api/send-request', 'POST', { email });
+    if (handleApiResponse(data, 'Đã gửi lời mời kết bạn')) {
+      if (emailInput) emailInput.value = '';
+      loadIndexData();
     }
   });
+
+  // ============== INITIALIZATION ==============
+
+  function formatDate(dateStr) {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('vi-VN');
+    } catch {
+      return dateStr;
+    }
+  }
+
+  // Load data on page load
+  window.addEventListener('load', () => {
+    if (ensureLogin()) {
+      loadIndexData();
+    }
+  });
+
+  // Expose for manual refresh
+  window.friendshipIndexReload = loadIndexData;
 })();

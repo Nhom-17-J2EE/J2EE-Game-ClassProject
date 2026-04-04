@@ -19,13 +19,16 @@ public class PrivateChatService {
     private final UserAccountRepository userAccountRepository;
     private final FriendshipService friendshipService;
     private final PrivateChatRecordRepository privateChatRecordRepository;
+    private final WordFilterService wordFilterService;
 
     public PrivateChatService(UserAccountRepository userAccountRepository,
                               FriendshipService friendshipService,
-                              PrivateChatRecordRepository privateChatRecordRepository) {
+                              PrivateChatRecordRepository privateChatRecordRepository,
+                              WordFilterService wordFilterService) {
         this.userAccountRepository = userAccountRepository;
         this.friendshipService = friendshipService;
         this.privateChatRecordRepository = privateChatRecordRepository;
+        this.wordFilterService = wordFilterService;
     }
 
     public ChatBootstrapResult buildChatBootstrap(String currentUserId, String friendId) {
@@ -81,6 +84,9 @@ public class PrivateChatService {
         if (normalizedContent.length() > MAX_MESSAGE_LENGTH) {
             normalizedContent = normalizedContent.substring(0, MAX_MESSAGE_LENGTH);
         }
+        
+        // Lọc từ ngữ bị cấm
+        normalizedContent = wordFilterService.filter(normalizedContent);
 
         UserAccount currentUser = userAccountRepository.findById(normalizedCurrentUserId).orElse(null);
         UserAccount friend = userAccountRepository.findById(normalizedFriendId).orElse(null);

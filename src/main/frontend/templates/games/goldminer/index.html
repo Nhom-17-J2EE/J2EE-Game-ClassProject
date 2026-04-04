@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Goldminer - Game Hub</title>
+    <link rel="stylesheet" th:href="@{/css/unified-app.css}">
+    <style>
+        .goldminer-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: linear-gradient(135deg, #8b7355 0%, #5c4a3d 100%);
+        }
+        
+        .game-header {
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            color: white;
+            text-align: center;
+        }
+        
+        .game-info {
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            color: white;
+            font-weight: bold;
+        }
+        
+        .game-canvas-container {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        #goldminerCanvas {
+            border: 4px solid gold;
+            background: linear-gradient(180deg, #87ceeb 0%, #e0f6ff 100%);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .game-controls {
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .btn-game {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        
+        .btn-start:hover {
+            background: #45a049;
+        }
+        
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        
+        .btn-stop:hover {
+            background: #da190b;
+        }
+        
+        .score-display {
+            font-size: 24px;
+            color: gold;
+            font-weight: bold;
+        }
+        
+        .bomb-warning {
+            color: red;
+            font-weight: bold;
+            animation: pulse 0.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div class="goldminer-container">
+        <div class="game-header">
+            <h1>⛏️ Goldminer</h1>
+            <p>Lấy vàng, tránh bom!</p>
+        </div>
+        
+        <div class="game-info">
+            <div>Score: <span class="score-display" id="scoreDisplay">0</span></div>
+            <div>Items: <span id="itemsDisplay">0</span></div>
+            <div>Bombs: <span id="bombsDisplay">0</span></div>
+            <div>Bomb spawn in: <span id="bombTimerDisplay">10s</span></div>
+        </div>
+        
+        <div class="game-canvas-container">
+            <canvas id="goldminerCanvas" width="800" height="600"></canvas>
+        </div>
+        
+        <div class="game-controls">
+            <button class="btn-game btn-start" id="startBtn">Start Game</button>
+            <button class="btn-game btn-stop" id="stopBtn">Stop Game</button>
+            <button class="btn-game" onclick="window.history.back()">Back</button>
+        </div>
+    </div>
+    
+    <script th:inline="javascript">
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const BOMB_SPAWN_INTERVAL = 10000;  // 10 seconds
+        
+        let canvas = document.getElementById('goldminerCanvas');
+        let ctx = canvas.getContext('2d');
+        let currentUserId = /*[[${currentUserId}]]*/ '';
+        let gameState = null;
+        let isGameRunning = false;
+        let gameStartTime = 0;
+        let lastBombSpawnTime = 0;
+        
+        // WebSocket connection
+        let stompClient = null;
+        let currentRoomId = 'goldminer_' + Date.now();
+        
+        // Initialize
+        function init() {
+            connectWebSocket();
+            setupCanvasClickListener();
+            setupButtons();
+            drawEmptyCanvas();
+        }
+        
+        // Draw empty canvas
+        function drawEmptyCanvas() {
+            ctx.fillStyle = '#e0f6ff';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+        
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const socket = new SockJS('/Game/ws');
+            stompClient = Stomp.over(socket);
+            
+            stompClient.connect({}, function() {
+                console.log('Connected to WebSocket');
+                
+                // Subscribe to game updates
+                stompClient.subscribe('/topic/goldminer.' + currentRoomId, function(message) {
+                    const data = JSON.parse(message.body);
+                    handleGameMessage(data);
+                });
+            });
+        }
+        
+        // Handle game messages
+        function handleGameMessage(data) {
+            if (!data.type) return;
+            
+            switch (data.type) {
+                case 'STATE_UPDATE':
+                    gameState = data.state;
+                    redrawCanvas();
+                    break;
+                case 'ITEM_COLLECTED':
+                    updateScore(data.score);
+                    redrawCanvas();
+                    break;
+                case 'BOMB_HIT':
+                    updateScore(data.score);
+                    redrawCanvas();
+                    break;
+                case 'GAME_STOPPED':
+                    isGameRunning = false;
+                    alert('Game Over! Final Score: ' + data.finalScore);
+                    break;
+            }
+        }
+        
+        // Setup canvas click
+        function setupCanvasClickListener() {
+            canvas.addEventListener('click', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) * (CANVAS_WIDTH / rect.width);
+                const y = (e.clientY - rect.top) * (CANVAS_HEIGHT / rect.height);
+                
+                if (!gameState) return;
+                
+                // Check if clicked on item
+                for (let item of gameState.items) {
+                    const dx = item.x - x;
+                    const dy = item.y - y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < 20) {
+                        collectItem(item.id);
+                        return;
+                    }
+                }
+                
+                // Check if clicked on bomb
+                for (let bomb of gameState.bombs) {
+                    const dx = bomb.x - x;
+                    const dy = bomb.y - y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < (bomb.radius || 30)) {
+                        hitBomb(bomb.id);
+                        return;
+                    }
+                }
+            });
+        }
+        
+        // Setup buttons
+        function setupButtons() {
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('stopBtn').addEventListener('click', stopGame);
+        }
+        
+        // Start game
+        function startGame() {
+            if (isGameRunning) {
+                alert('Game is already running!');
+                return;
+            }
+            
+            stompClient.send('/app/goldminer.start', {}, JSON.stringify({
+                roomId: currentRoomId
+            }));
+            
+            isGameRunning = true;
+            gameStartTime = Date.now();
+            lastBombSpawnTime = Date.now();
+            updateBombTimer();
+        }
+        
+        // Stop game
+        function stopGame() {
+            if (!isGameRunning) {
+                alert('Game is not running!');
+                return;
+            }
+            
+            stompClient.send('/app/goldminer.stop', {}, JSON.stringify({
+                roomId: currentRoomId
+            }));
+            
+            isGameRunning = false;
+        }
+        
+        // Collect item
+        function collectItem(itemId) {
+            stompClient.send('/app/goldminer.collect', {}, JSON.stringify({
+                roomId: currentRoomId,
+                itemId: itemId
+            }));
+        }
+        
+        // Hit bomb
+        function hitBomb(bombId) {
+            if (confirm('⚠️ Hit a bomb! This will reduce your score by 50%!')) {
+                stompClient.send('/app/goldminer.hit-bomb', {}, JSON.stringify({
+                    roomId: currentRoomId,
+                    bombId: bombId
+                }));
+            }
+        }
+        
+        // Update score display
+        function updateScore(score) {
+            document.getElementById('scoreDisplay').textContent = score;
+        }
+        
+        // Redraw canvas
+        function redrawCanvas() {
+            if (!gameState) return;
+            
+            // Clear canvas
+            ctx.fillStyle = '#e0f6ff';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw items
+            for (let item of gameState.items) {
+                drawItem(item);
+            }
+            
+            // Draw bombs
+            for (let bomb of gameState.bombs) {
+                drawBomb(bomb);
+            }
+            
+            // Update UI
+            document.getElementById('itemsDisplay').textContent = gameState.items.length;
+            document.getElementById('bombsDisplay').textContent = gameState.bombs.length;
+            document.getElementById('scoreDisplay').textContent = gameState.score;
+        }
+        
+        // Draw item
+        function drawItem(item) {
+            const colors = ['#FFD700', '#C0C0C0', '#FF1493'];  // gold, silver, ruby
+            ctx.fillStyle = colors[item.type] || '#FFD700';
+            ctx.beginPath();
+            ctx.arc(item.x, item.y, 12, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw value text
+            ctx.fillStyle = 'black';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(item.value, item.x, item.y);
+        }
+        
+        // Draw bomb
+        function drawBomb(bomb) {
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(bomb.x, bomb.y, bomb.radius || 30, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw fuse
+            ctx.strokeStyle = '#FF4500';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(bomb.x, bomb.y - (bomb.radius || 30));
+            ctx.lineTo(bomb.x, bomb.y - (bomb.radius || 30) - 10);
+            ctx.stroke();
+            
+            // Draw spark
+            ctx.fillStyle = '#FF6347';
+            ctx.beginPath();
+            ctx.arc(bomb.x, bomb.y - (bomb.radius || 30) - 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Update bomb spawn timer
+        function updateBombTimer() {
+            if (!isGameRunning) return;
+            
+            const elapsed = Date.now() - lastBombSpawnTime;
+            const remaining = Math.max(0, BOMB_SPAWN_INTERVAL - elapsed);
+            const seconds = Math.ceil(remaining / 1000);
+            
+            const timerElement = document.getElementById('bombTimerDisplay');
+            timerElement.textContent = seconds + 's';
+            
+            if (seconds <= 3) {
+                timerElement.classList.add('bomb-warning');
+            } else {
+                timerElement.classList.remove('bomb-warning');
+            }
+            
+            setTimeout(updateBombTimer, 100);
+        }
+        
+        // Start
+        init();
+    </script>
+    
+    <script src="/Game/lib/sockjs.min.js"></script>
+    <script src="/Game/lib/stomp.min.js"></script>
+</body>
+</html>

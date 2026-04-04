@@ -1,56 +1,82 @@
-﻿(function () {
+﻿(function() {
+  'use strict';
+
   const root = document.getElementById('friendshipSearchRoot');
   if (!root) return;
 
   const out = document.getElementById('friendshipSearchOut');
-  const currentUserId = root.dataset.currentUserId || window.CaroUser?.get?.()?.userId || '';
+  const uid = root.dataset.currentUserId || window.CaroUser?.get?.()?.userId || '';
   const ui = window.CaroUi || {};
-  if (!currentUserId) return;
+
+  if (!uid) return;
+
+  // ============== UTILITIES ==============
 
   function setStatus(message, ok) {
     if (ui.setStatus) {
       ui.setStatus(out, message, ok);
     } else if (out) {
       out.textContent = String(message || '');
+      out.className = ok ? 'alert alert-success' : 'alert alert-danger';
     }
   }
 
-  function report(data, successMessage) {
-    if (ui.apiResult) {
-      return ui.apiResult(data, { statusEl: out, successMessage });
+  function showToast(message, type = 'info') {
+    if (ui.toast) {
+      ui.toast(message, { type });
+    } else {
+      console.log(`[${type}] ${message}`);
     }
-    const ok = !!(data && data.success);
-    setStatus(ok ? successMessage : String(data?.error || data?.message || 'Thao tac that bai'), ok);
-    return ok;
   }
+
+  async function apiCall(url, method = 'GET', payload = null) {
+    try {
+      const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
+      };
+      if (payload && (method === 'POST' || method === 'PUT')) {
+        options.body = JSON.stringify(payload);
+      }
+      const response = await fetch(url, options);
+      return await response.json();
+    } catch (error) {
+      console.error('API call failed:', error);
+      showToast(String(error.message || error), 'danger');
+      return { success: false, error: String(error) };
+    }
+  }
+
+  // ============== SEND REQUEST ACTION ==============
 
   document.querySelectorAll('.quick-add[data-user-id]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const addresseeId = btn.dataset.userId;
-      if (!addresseeId) return;
+      const friendId = btn.dataset.userId;
+      if (!friendId) return;
+
       const originalText = btn.textContent;
-      btn.textContent = 'Dang gui...';
       btn.disabled = true;
+      btn.textContent = 'Đang gửi...';
+
       try {
-        const res = await fetch('/friendship/send-request-by-id', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ requesterId: currentUserId, addresseeId: addresseeId })
-        });
-        const data = await res.json();
-        const ok = report(data, 'Da gui loi moi ket ban');
-        if (ok) {
-          btn.textContent = 'Da gui';
+        const data = await apiCall('/friendship/api/send-request-by-id', 'POST', { addresseeId: friendId });
+        
+        if (data?.success) {
+          setStatus('Đã gửi lời mời kết bạn', true);
+          showToast('Đã gửi lời mời kết bạn', 'success');
+          btn.textContent = 'Đã gửi';
           btn.classList.remove('btn-primary');
-          btn.classList.add('btn-outline-success');
+          btn.classList.add('btn-success');
         } else {
+          setStatus(data?.error || 'Gửi lời mời thất bại', false);
+          showToast(data?.error || 'Gửi lời mời thất bại', 'danger');
           btn.textContent = originalText;
           btn.disabled = false;
         }
-      } catch (err) {
-        const message = String(err?.message || err || 'Yeu cau that bai');
+      } catch (error) {
+        const message = String(error?.message || error || 'Lỗi yêu cầu');
         setStatus(message, false);
-        ui.toast?.(message, { type: 'danger' });
+        showToast(message, 'danger');
         btn.textContent = originalText;
         btn.disabled = false;
       }
