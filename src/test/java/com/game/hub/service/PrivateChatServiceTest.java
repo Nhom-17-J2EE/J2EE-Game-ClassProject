@@ -30,12 +30,13 @@ class PrivateChatServiceTest {
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
         FriendshipService friendshipService = mock(FriendshipService.class);
         PrivateChatRecordRepository chatRepo = mock(PrivateChatRecordRepository.class);
+        WordFilterService wordFilterService = mock(WordFilterService.class);
 
         when(userRepo.findById("u1")).thenReturn(Optional.of(user("u1", "Alice")));
         when(userRepo.findById("u2")).thenReturn(Optional.of(user("u2", "Bob")));
         when(friendshipService.areFriends("u1", "u2")).thenReturn(false);
 
-        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo);
+        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo, wordFilterService);
         PrivateChatService.ChatBootstrapResult result = service.buildChatBootstrap("u1", "u2");
 
         assertFalse(result.ok());
@@ -47,10 +48,12 @@ class PrivateChatServiceTest {
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
         FriendshipService friendshipService = mock(FriendshipService.class);
         PrivateChatRecordRepository chatRepo = mock(PrivateChatRecordRepository.class);
+        WordFilterService wordFilterService = mock(WordFilterService.class);
 
         when(userRepo.findById("u1")).thenReturn(Optional.of(user("u1", "Alice")));
         when(userRepo.findById("u2")).thenReturn(Optional.of(user("u2", "Bob")));
         when(friendshipService.areFriends("u1", "u2")).thenReturn(true);
+        when(wordFilterService.filter("hello")).thenReturn("hello");
         when(chatRepo.save(any(PrivateChatRecord.class))).thenAnswer(invocation -> {
             PrivateChatRecord record = invocation.getArgument(0);
             record.setId(10L);
@@ -58,7 +61,7 @@ class PrivateChatServiceTest {
             return record;
         });
 
-        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo);
+        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo, wordFilterService);
         PrivateChatService.SendResult result = service.saveMessage(" u1 ", "u2", "  hello  ", " cid-1 ");
 
         assertTrue(result.ok());
@@ -85,6 +88,7 @@ class PrivateChatServiceTest {
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
         FriendshipService friendshipService = mock(FriendshipService.class);
         PrivateChatRecordRepository chatRepo = mock(PrivateChatRecordRepository.class);
+        WordFilterService wordFilterService = mock(WordFilterService.class);
 
         when(userRepo.findById("u1")).thenReturn(Optional.of(user("u1", "Alice")));
         when(userRepo.findById("u2")).thenReturn(Optional.of(user("u2", "Bob")));
@@ -101,7 +105,7 @@ class PrivateChatServiceTest {
         existing.setSentAt(LocalDateTime.of(2026, 2, 23, 10, 2));
         when(chatRepo.findFirstByRoomKeyAndClientMessageId("u1__u2", "cid-15")).thenReturn(Optional.of(existing));
 
-        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo);
+        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo, wordFilterService);
         PrivateChatService.SendResult result = service.saveMessage("u1", "u2", "hello", "cid-15");
 
         assertTrue(result.ok());
@@ -115,6 +119,7 @@ class PrivateChatServiceTest {
         UserAccountRepository userRepo = mock(UserAccountRepository.class);
         FriendshipService friendshipService = mock(FriendshipService.class);
         PrivateChatRecordRepository chatRepo = mock(PrivateChatRecordRepository.class);
+        WordFilterService wordFilterService = mock(WordFilterService.class);
 
         when(userRepo.findById("u1")).thenReturn(Optional.of(user("u1", "Alice")));
         when(userRepo.findById("u2")).thenReturn(Optional.of(user("u2", "Bob")));
@@ -140,7 +145,7 @@ class PrivateChatServiceTest {
 
         when(chatRepo.findTop100ByRoomKeyOrderByIdDesc("u1__u2")).thenReturn(List.of(newer, older));
 
-        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo);
+        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo, wordFilterService);
         PrivateChatService.ChatBootstrapResult result = service.buildChatBootstrap("u1", "u2");
 
         assertTrue(result.ok());
@@ -152,6 +157,37 @@ class PrivateChatServiceTest {
         assertNull(first.get("clientMessageId"));
         assertEquals("old", first.get("message"));
         assertEquals("new", second.get("message"));
+    }
+
+    @Test
+    void saveMessageShouldFilterBannedWords() {
+        UserAccountRepository userRepo = mock(UserAccountRepository.class);
+        FriendshipService friendshipService = mock(FriendshipService.class);
+        PrivateChatRecordRepository chatRepo = mock(PrivateChatRecordRepository.class);
+        WordFilterService wordFilterService = mock(WordFilterService.class);
+
+        when(userRepo.findById("u1")).thenReturn(Optional.of(user("u1", "Alice")));
+        when(userRepo.findById("u2")).thenReturn(Optional.of(user("u2", "Bob")));
+        when(friendshipService.areFriends("u1", "u2")).thenReturn(true);
+        // Mock word filter to replace "damn" with "***"
+        when(wordFilterService.filter("this is damn bad")).thenReturn("this is *** bad");
+        when(chatRepo.save(any(PrivateChatRecord.class))).thenAnswer(invocation -> {
+            PrivateChatRecord record = invocation.getArgument(0);
+            record.setId(20L);
+            record.setSentAt(LocalDateTime.of(2026, 2, 23, 10, 5, 0));
+            return record;
+        });
+
+        PrivateChatService service = new PrivateChatService(userRepo, friendshipService, chatRepo, wordFilterService);
+        PrivateChatService.SendResult result = service.saveMessage("u1", "u2", "this is damn bad", null);
+
+        assertTrue(result.ok());
+        assertEquals("this is *** bad", result.payload().get("message"));
+
+        ArgumentCaptor<PrivateChatRecord> captor = ArgumentCaptor.forClass(PrivateChatRecord.class);
+        verify(chatRepo).save(captor.capture());
+        PrivateChatRecord saved = captor.getValue();
+        assertEquals("this is *** bad", saved.getContent());
     }
 
     private static UserAccount user(String id, String displayName) {
