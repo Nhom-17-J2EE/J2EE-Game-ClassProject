@@ -11,6 +11,7 @@ import com.game.hub.repository.PasswordResetTokenRepository;
 import com.game.hub.repository.UserAccountRepository;
 import com.game.hub.repository.UserAvatarBinaryRepository;
 import org.springframework.beans.factory.annotation.Value;
+import com.game.hub.util.PasswordValidator;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -98,8 +99,9 @@ public class AccountService {
         if (normalizedEmail == null) {
             return ServiceResult.error("Email is required");
         }
-        if (password == null || password.isBlank()) {
-            return ServiceResult.error("Password is required");
+        List<String> passwordErrors = PasswordValidator.validate(password);
+        if (!passwordErrors.isEmpty()) {
+            return ServiceResult.error(String.join("; ", passwordErrors));
         }
         ServiceResult usernameValidation = validateUsernameCandidate(rawUsername, null);
         if (!usernameValidation.success()) {
@@ -346,8 +348,12 @@ public class AccountService {
     public ServiceResult changePassword(String userId, String currentPassword, String newPassword) {
         UserAccount user = userAccountRepository.findById(userId).orElse(null);
         if (user == null) return ServiceResult.error("User not found");
-        if (currentPassword == null || currentPassword.isBlank() || newPassword == null || newPassword.isBlank()) {
-            return ServiceResult.error("Current password and new password are required");
+        if (currentPassword == null || currentPassword.isBlank()) {
+            return ServiceResult.error("Current password is required");
+        }
+        List<String> passwordErrors = PasswordValidator.validate(newPassword);
+        if (!passwordErrors.isEmpty()) {
+            return ServiceResult.error(String.join("; ", passwordErrors));
         }
 
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
@@ -976,8 +982,12 @@ public class AccountService {
     }
 
     public ServiceResult resetPassword(String userId, String code, String newPassword, String confirmPassword) {
-        if (newPassword == null || newPassword.isBlank() || confirmPassword == null || confirmPassword.isBlank()) {
-            return ServiceResult.error("New password and confirmation are required");
+        List<String> passwordErrors = PasswordValidator.validate(newPassword);
+        if (!passwordErrors.isEmpty()) {
+            return ServiceResult.error(String.join("; ", passwordErrors));
+        }
+        if (confirmPassword == null || confirmPassword.isBlank()) {
+            return ServiceResult.error("Password confirmation is required");
         }
         if (!newPassword.equals(confirmPassword)) {
             return ServiceResult.error("Password confirmation does not match");

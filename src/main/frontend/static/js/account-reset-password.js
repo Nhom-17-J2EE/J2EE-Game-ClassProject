@@ -119,11 +119,22 @@
     }
   });
 
+  // Attach password strength indicator
+  if (window.PasswordStrength && newPassword) {
+    const pwdStrengthContainer = document.getElementById("resetPasswordStrength");
+    window.PasswordStrength.attach(newPassword, pwdStrengthContainer);
+  }
+
   resetForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!isCodeVerified) {
       setStatus("Vui long xac thuc ma truoc khi dat lai mat khau", false);
       ui.toast?.("Vui long xac thuc ma truoc khi dat lai mat khau", { type: "warning" });
+      return;
+    }
+    if (window.PasswordStrength && !window.PasswordStrength.allPassed(newPassword?.value || "")) {
+      setStatus("Mat khau moi chua dat yeu cau bao mat", false);
+      ui.toast?.("Mat khau moi chua dat yeu cau bao mat", { type: "danger" });
       return;
     }
 

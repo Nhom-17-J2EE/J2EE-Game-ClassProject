@@ -1174,3 +1174,123 @@ body.social-drawer-open[data-open-social-drawer="friends"] #friendsDrawer {
     grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   }
 }
+
+/* ── Password strength indicator ────────────────────────────────── */
+
+.auth-onboard__pwd-strength {
+  margin-top: 6px;
+}
+
+.pwd-rules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.pwd-rule {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(17, 38, 60, 0.9);
+  color: rgba(190, 201, 238, 0.75);
+  font-size: 0.88rem;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.pwd-rule i {
+  font-size: 1rem;
+  color: rgba(150, 159, 197, 0.78);
+  transition: color 0.2s ease;
+}
+
+.pwd-rule.is-valid {
+  color: #70f2b0;
+  background: linear-gradient(90deg, rgba(22, 82, 76, 0.76), rgba(14, 34, 53, 0.9));
+}
+
+.pwd-rule.is-valid i {
+  color: #70f2b0;
+}
+
+/* ── Strength meter bar ─────────────────────────────────────────── */
+
+.pwd-meter {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pwd-meter__track {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(50, 60, 90, 0.6);
+  overflow: hidden;
+}
+
+.pwd-meter__bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: #b0b6c8;
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.pwd-meter__label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  min-width: 80px;
+  text-align: right;
+  color: rgba(190, 201, 238, 0.75);
+  transition: color 0.2s ease;
+}
+
+/* Weak */
+.pwd-meter.pwd-weak .pwd-meter__bar {
+  background: #ff5c5c;
+}
+.pwd-meter.pwd-weak .pwd-meter__label {
+  color: #ff5c5c;
+}
+
+/* Fair */
+.pwd-meter.pwd-fair .pwd-meter__bar {
+  background: #ffa040;
+}
+.pwd-meter.pwd-fair .pwd-meter__label {
+  color: #ffa040;
+}
+
+/* Good */
+.pwd-meter.pwd-good .pwd-meter__bar {
+  background: #40d080;
+}
+.pwd-meter.pwd-good .pwd-meter__label {
+  color: #40d080;
+}
+
+/* Strong */
+.pwd-meter.pwd-strong .pwd-meter__bar {
+  background: #70f2b0;
+}
+.pwd-meter.pwd-strong .pwd-meter__label {
+  color: #70f2b0;
+}
+
+/* ── Settings page overrides (uses Bootstrap form context) ──────── */
+
+.cg-settings-card .pwd-rule {
+  background: rgba(var(--bs-body-bg-rgb, 33, 37, 41), 0.5);
+}
+
+.cg-settings-card .pwd-rule.is-valid {
+  background: rgba(22, 82, 76, 0.28);
+}
+
+.cg-settings-card .pwd-meter__track {
+  background: rgba(var(--bs-body-bg-rgb, 33, 37, 41), 0.4);
+}

@@ -155,8 +155,8 @@
       emailInput?.focus();
       return false;
     }
-    if (password.length < 6) {
-      setStatus("Mat khau can it nhat 6 ky tu.", false);
+    if (!window.PasswordStrength || !window.PasswordStrength.allPassed(password)) {
+      setStatus("Mat khau chua dat yeu cau bao mat.", false);
       passwordInput?.focus();
       return false;
     }
@@ -327,4 +327,10 @@
   populateBirthDateOptions();
   renderStep();
   syncUsernameRules();
+
+  // Attach password strength indicator
+  if (window.PasswordStrength) {
+    const pwdStrengthContainer = document.getElementById("regPasswordStrength");
+    window.PasswordStrength.attach(passwordInput, pwdStrengthContainer);
+  }
 })();

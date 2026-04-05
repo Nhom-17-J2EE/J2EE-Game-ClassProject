@@ -92,8 +92,10 @@
               </label>
             </div>
 
+            <div id="regPasswordStrength" class="auth-onboard__pwd-strength"></div>
+
             <div class="auth-onboard__microcopy">
-              Mat khau can toi thieu 6 ky tu. Ban co the doi lai sau trong phan tai khoan.
+              Ban co the doi lai sau trong phan tai khoan.
             </div>
 
             <div class="auth-onboard__actions">
@@ -231,6 +233,7 @@
 </main>
 
 <th:block th:replace="~{fragments :: appScripts('account-register')}"></th:block>
+<script th:src="@{/js/password-strength.js}"></script>
 <script th:src="@{/js/account-register.js}"></script>
 </body>
 </html>
