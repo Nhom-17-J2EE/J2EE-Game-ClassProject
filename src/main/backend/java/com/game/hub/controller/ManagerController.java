@@ -1,6 +1,7 @@
 package com.game.hub.controller;
 
 import com.game.hub.entity.UserAccount;
+import com.game.hub.util.PasswordValidator;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import com.game.hub.repository.UserAccountRepository;
@@ -72,9 +73,12 @@ public class ManagerController {
     @ResponseBody
     @PostMapping("/users")
     public Object create(@RequestBody CreateUserRequest request) {
-        if (request == null || request.email() == null || request.email().isBlank()
-            || request.password() == null || request.password().isBlank()) {
-            return Map.of("success", false, "error", "Email and password are required");
+        if (request == null || request.email() == null || request.email().isBlank()) {
+            return Map.of("success", false, "error", "Email is required");
+        }
+        java.util.List<String> pwdErrors = PasswordValidator.validate(request.password());
+        if (!pwdErrors.isEmpty()) {
+            return Map.of("success", false, "error", String.join("; ", pwdErrors));
         }
         if (userAccountRepository.findByEmail(request.email()).isPresent()) {
             return Map.of("success", false, "error", "Email already exists");

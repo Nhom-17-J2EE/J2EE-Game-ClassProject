@@ -166,6 +166,12 @@
     const newPasswordInput = document.getElementById("settingsNewPassword");
     const confirmPasswordInput = document.getElementById("settingsConfirmPassword");
 
+    // Attach password strength indicator to new-password field
+    if (window.PasswordStrength && newPasswordInput) {
+      const pwdStrengthContainer = document.getElementById("settingsPasswordStrength");
+      window.PasswordStrength.attach(newPasswordInput, pwdStrengthContainer);
+    }
+
     const themeSelect = document.getElementById("themeModeSelect");
     const languageSelect = document.getElementById("languageModeSelect");
     const desktopSidebarVisibleByDefault = document.getElementById("desktopSidebarVisibleByDefault");
@@ -754,6 +760,10 @@
 
       if (!currentPassword || !newPassword) {
         setStatus(passwordStatus, "Vui long nhap day du mat khau.", false);
+        return;
+      }
+      if (window.PasswordStrength && !window.PasswordStrength.allPassed(newPassword)) {
+        setStatus(passwordStatus, "Mat khau moi chua dat yeu cau bao mat.", false);
         return;
       }
       if (newPassword !== confirmPassword) {

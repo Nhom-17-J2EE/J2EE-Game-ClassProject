@@ -281,6 +281,7 @@
           <div class="col-md-6">
             <label class="form-label" for="settingsNewPassword">Mat khau moi</label>
             <input id="settingsNewPassword" class="form-control" type="password" th:disabled="${!isAuthenticated}">
+            <div id="settingsPasswordStrength" class="auth-onboard__pwd-strength mt-2"></div>
           </div>
           <div class="col-md-6">
             <label class="form-label" for="settingsConfirmPassword">Nhap lai mat khau moi</label>
@@ -465,6 +466,7 @@
 </main>
 
 <th:block th:replace="~{fragments :: appScripts('settings')}"></th:block>
+<script th:src="@{/js/password-strength.js}"></script>
 <script th:src="@{/js/settings.js}"></script>
 </body>
 </html>
